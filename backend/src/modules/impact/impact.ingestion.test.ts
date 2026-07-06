@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { buildImpactReportFromGitHub } from './impact.ingestion.js'
 import type { GitHubCollectionService } from '../github/github.service.js'
 import type {
@@ -141,6 +141,10 @@ const service = {
 } satisfies GitHubCollectionService
 
 describe('buildImpactReportFromGitHub', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
   it('builds a contract-ready top engineer report from GitHub signals', async () => {
     const report = await buildImpactReportFromGitHub({
       repository: 'PostHog/posthog',
@@ -158,5 +162,21 @@ describe('buildImpactReportFromGitHub', () => {
     expect(report.engineers[0]?.explanation).toContain('Activity counts are kept as diagnostics')
     expect(report.engineers[0]?.evidence.some((evidence) => evidence.contributionType === 'Post-merge adoption')).toBe(true)
     expect(report.engineers.some((engineer) => engineer.githubLogin === 'grace')).toBe(true)
+  })
+
+  it('enriches every eligible pull request in the analysis window by default', async () => {
+    await buildImpactReportFromGitHub({
+      repository: 'PostHog/posthog',
+      analysisWindowDays: 90,
+      now: new Date('2026-07-06T00:00:00.000Z'),
+      service,
+    })
+
+    expect(service.fetchPullRequestDiscussion).toHaveBeenCalledTimes(2)
+    expect(service.fetchPullRequestDiscussion).toHaveBeenCalledWith(123, { perPage: 100 })
+    expect(service.fetchPullRequestDiscussion).toHaveBeenCalledWith(124, { perPage: 100 })
+    expect(service.fetchPullRequestFiles).toHaveBeenCalledTimes(2)
+    expect(service.fetchPullRequestFiles).toHaveBeenCalledWith(123, { perPage: 100 })
+    expect(service.fetchPullRequestFiles).toHaveBeenCalledWith(124, { perPage: 100 })
   })
 })

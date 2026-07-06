@@ -12,7 +12,6 @@ import {
   getDimensionScore,
   type DimensionFilter,
 } from '@/features/impact-dashboard/impactScoreDimensions.ts'
-import { MethodologyPanel } from '@/features/impact-dashboard/components/MethodologyPanel.tsx'
 import type {
   ImpactDashboardResponse,
   ImpactEngineer,
@@ -172,8 +171,9 @@ export function ImpactDashboard() {
           <Section
             id="leaderboard"
             title="Top 5 impactful engineers"
-            description="Scores favor contribution patterns that made PostHog better, safer, faster, or easier to build."
+            description="Impact weighs customer value 30%, technical leverage 25%, risk reduction 20%, ownership 15%, and collaboration 10%; raw volume is only supporting context."
           >
+            <span className="nav-anchor" id="methodology" aria-hidden="true" />
             <DashboardFilters
               areaFilter={areaFilter}
               confidenceFilter={confidenceFilter}
@@ -219,35 +219,6 @@ export function ImpactDashboard() {
                 </div>
               </>
             )}
-          </Section>
-
-          <Section
-            id="posthog-value"
-            title="Why it matters to PostHog"
-            description="The model highlights product and platform work that compounds for an open-source analytics company."
-          >
-            <div className="why-grid">
-              <p>
-                Customer-facing analytics, ingestion correctness, query performance,
-                and reliability work carry more weight than raw PR volume.
-              </p>
-              <p>
-                The selected engineer view connects each rank to concrete evidence, so
-                leaders can distinguish durable ownership from activity spikes.
-              </p>
-            </div>
-          </Section>
-
-          <Section
-            id="methodology"
-            title="Methodology"
-            description="The backend owns this scoring model so every client sees the same ranked result."
-          >
-            <MethodologyPanel
-              dimensions={data.methodology.dimensions}
-              guardrails={data.methodology.guardrails}
-              summary={data.methodology.summary}
-            />
           </Section>
         </>
       )}
