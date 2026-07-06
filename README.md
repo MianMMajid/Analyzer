@@ -225,6 +225,7 @@ Frontend env:
 | --- | --- | --- |
 | `VITE_APP_NAME` | Yes | Browser title/app label. |
 | `VITE_API_BASE_URL` | Yes | Backend base URL. |
+| `VITE_PREVIEW_ALLOWED_HOSTS` | Railway preview | Comma-separated hostnames allowed by `vite preview`, for example `frontend-production-c68e.up.railway.app`. |
 
 ## Scripts
 
