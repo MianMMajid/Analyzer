@@ -37,12 +37,16 @@ Implemented:
 - GitHub Actions CI running install, check, and tests.
 - Railway-ready config and env examples.
 - Local 90-day PostHog branch/commit export tooling.
+- PostgreSQL client foundation with lazy pool creation, readiness checks, schema constants, and initial SQL migration.
+- Queue abstraction with local in-memory behavior and explicit durable-driver guardrails.
+- GitHub collection module with pagination, rate-limit retry handling, normalized PR/commit/review types, and tests.
+- Contributor identity normalization for aliases, noreply emails, co-authors, bots, diacritics, and ambiguous identities.
 
 Not yet production-complete:
 
-- PostgreSQL-backed repository is planned but not wired yet.
-- Real GitHub ingestion pipeline is planned but not replacing the current seed data yet.
-- Queue-backed scheduled refresh is planned but not implemented yet.
+- Impact repository still reads seed data rather than PostgreSQL.
+- GitHub collection is implemented but not wired into the refresh pipeline yet.
+- Queue abstraction exists, but durable `pg-boss` execution is not enabled yet.
 - Railway services still need to be created and configured with production env vars.
 
 The full implementation blueprint is in [FINAL_ARCHITECTURE_PLAN.md](./FINAL_ARCHITECTURE_PLAN.md). [ARCHITECTURE.md](./ARCHITECTURE.md) intentionally stays short and points to that source of truth.
@@ -54,8 +58,9 @@ The full implementation blueprint is in [FINAL_ARCHITECTURE_PLAN.md](./FINAL_ARC
 ├── backend/                  # Fastify API, scoring boundary, export jobs
 │   ├── src/app.ts            # Server factory, plugins, routes, health checks
 │   ├── src/config/env.ts     # Zod-backed runtime env parsing
+│   ├── src/db/               # PostgreSQL client, schema constants, migrations
 │   ├── src/jobs/             # PostHog export and refresh entrypoints
-│   └── src/modules/          # Impact, HTTP errors, performance logging
+│   └── src/modules/          # Impact, GitHub, contributors, queue, HTTP, performance
 ├── frontend/                 # React dashboard
 │   ├── src/features/impact-dashboard/
 │   │   ├── api/              # Fetch + Zod response validation
@@ -94,11 +99,12 @@ Shared:
 - oxlint
 - TypeScript project builds
 
-Planned production data layer:
+Production data layer foundation:
 
 - PostgreSQL on Railway
-- Queue-backed ingestion job
-- GitHub API ingestion with pagination, deduplication, and contributor normalization
+- SQL migration for reports, engineers, evidence, and ingestion runs
+- Queue abstraction for refresh jobs
+- GitHub API collection with pagination, deduplication, retry, and contributor normalization support
 
 ## API Contract
 
@@ -247,6 +253,10 @@ Current test coverage includes:
 - Backend environment validation tests.
 - Backend scoring tests.
 - Backend route tests through Fastify injection.
+- Backend DB client/readiness tests.
+- Backend queue client tests.
+- Backend GitHub client/service tests.
+- Backend contributor normalization/repository tests.
 - Frontend API response validation tests.
 
 Production standard from the architecture plan:
@@ -335,10 +345,9 @@ Frontend production checks:
 
 ## Next Production Milestones
 
-1. Add PostgreSQL client, schema, and migrations.
-2. Replace seed data with DB-backed impact reports.
-3. Implement GitHub ingestion with pagination, rate-limit handling, and deduplication.
-4. Add contributor normalization across login, email, co-authors, and bot identities.
-5. Add queue-backed refresh jobs.
-6. Deploy backend, frontend, and PostgreSQL to Railway.
-7. Verify `GET /api/v1/impact/summary` averages under 150ms in production.
+1. Wire impact repository reads to PostgreSQL.
+2. Wire refresh pipeline to GitHub collection, contributor normalization, and scoring.
+3. Enable durable queue execution with `pg-boss` or an equivalent Railway-compatible worker.
+4. Add database migration execution to deployment/startup workflow.
+5. Deploy backend, frontend, and PostgreSQL to Railway.
+6. Verify `GET /api/v1/impact/summary` averages under 150ms in production.
