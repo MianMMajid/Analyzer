@@ -25,6 +25,8 @@ export function ImpactDashboard() {
   const [areaFilter, setAreaFilter] = useState('all')
   const [confidenceFilter, setConfidenceFilter] = useState('all')
   const [dimensionFilter, setDimensionFilter] = useState<DimensionFilter>('all')
+  const [lastCheckedAt, setLastCheckedAt] = useState<number | null>(null)
+  const [currentTime, setCurrentTime] = useState(() => Date.now())
 
   useEffect(() => {
     let isMounted = true
@@ -40,6 +42,7 @@ export function ImpactDashboard() {
 
         setErrorMessage(null)
         setData(dashboardData)
+        setLastCheckedAt(Date.now())
         setSelectedEngineerId((currentId) => {
           if (!shouldResetSelection && dashboardData.engineers.some((engineer) => engineer.id === currentId)) {
             return currentId
@@ -50,6 +53,7 @@ export function ImpactDashboard() {
       } catch (error: unknown) {
         if (isMounted) {
           setErrorMessage(error instanceof Error ? error.message : 'Unknown API error')
+          setLastCheckedAt(Date.now())
         }
       }
     }
@@ -62,6 +66,16 @@ export function ImpactDashboard() {
     return () => {
       isMounted = false
       window.clearInterval(refreshTimer)
+    }
+  }, [])
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setCurrentTime(Date.now())
+    }, 1_000)
+
+    return () => {
+      window.clearInterval(timer)
     }
   }, [])
 
@@ -106,6 +120,19 @@ export function ImpactDashboard() {
       timeStyle: 'short',
     }).format(new Date(data.generatedAt))
   }, [data])
+
+  const freshnessLabel = useMemo(() => {
+    if (data === null) {
+      return null
+    }
+
+    const reportAgeLabel = formatElapsedTime(currentTime - new Date(data.generatedAt).getTime())
+    const checkedLabel = lastCheckedAt === null
+      ? 'checking'
+      : `checked ${formatElapsedTime(currentTime - lastCheckedAt)}`
+
+    return `Report ${reportAgeLabel} / ${checkedLabel}`
+  }, [currentTime, data, lastCheckedAt])
 
   const hasActiveFilters =
     areaFilter !== 'all' || confidenceFilter !== 'all' || dimensionFilter !== 'all'
@@ -156,7 +183,7 @@ export function ImpactDashboard() {
             </div>
             <div className="insight-strip__item">
               <span>Freshness</span>
-              <strong>{generatedAtLabel}</strong>
+              <strong title={generatedAtLabel ?? undefined}>{freshnessLabel}</strong>
             </div>
             <div className="insight-strip__item">
               <span>Confidence</span>
@@ -242,4 +269,28 @@ export function ImpactDashboard() {
       )}
     </AppShell>
   )
+}
+
+function formatElapsedTime(milliseconds: number): string {
+  const seconds = Math.max(0, Math.floor(milliseconds / 1_000))
+
+  if (seconds < 5) {
+    return 'just now'
+  }
+
+  if (seconds < 60) {
+    return `${seconds}s ago`
+  }
+
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) {
+    return `${minutes}m ago`
+  }
+
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) {
+    return `${hours}h ago`
+  }
+
+  return `${Math.floor(hours / 24)}d ago`
 }
