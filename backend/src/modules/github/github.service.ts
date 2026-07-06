@@ -13,6 +13,7 @@ import type {
   GitHubPaginatedResult,
   GitHubPullRequest,
   GitHubPullRequestDiscussion,
+  GitHubPullRequestFile,
   GitHubPullRequestIssueComment,
   GitHubPullRequestReview,
   GitHubPullRequestReviewComment,
@@ -43,6 +44,10 @@ export type GitHubCollectionService = {
     pullRequestNumber: number,
     options?: GitHubPageOptions,
   ) => Promise<GitHubPullRequestDiscussion>
+  fetchPullRequestFiles: (
+    pullRequestNumber: number,
+    options?: GitHubPageOptions,
+  ) => Promise<GitHubPaginatedResult<GitHubPullRequestFile>>
 }
 
 type UnknownRecord = Record<string, unknown>
@@ -201,11 +206,25 @@ export function createGitHubCollectionService(
     }
   }
 
+  async function fetchPullRequestFiles(
+    pullRequestNumber: number,
+    options: GitHubPageOptions = {},
+  ): Promise<GitHubPaginatedResult<GitHubPullRequestFile>> {
+    const response = await client.paginateJson<unknown>(
+      repositoryPath(`/pulls/${pullRequestNumber}/files`),
+      {},
+      options,
+    )
+
+    return mapPaginatedResult(response, normalizePullRequestFile)
+  }
+
   return {
     fetchBranches,
     fetchCommitsSince,
     fetchPullRequestsUpdatedSince,
     fetchPullRequestDiscussion,
+    fetchPullRequestFiles,
   }
 }
 
@@ -384,6 +403,18 @@ function normalizeReviewComment(
   }
 
   return comment
+}
+
+function normalizePullRequestFile(value: unknown): GitHubPullRequestFile {
+  const record = requireRecord(value, 'pull request file')
+
+  return {
+    path: requireString(record, 'filename', 'pull_request_file.filename'),
+    status: requireString(record, 'status', 'pull_request_file.status'),
+    additions: requireNumber(record, 'additions', 'pull_request_file.additions'),
+    deletions: requireNumber(record, 'deletions', 'pull_request_file.deletions'),
+    changes: requireNumber(record, 'changes', 'pull_request_file.changes'),
+  }
 }
 
 function normalizeLabels(value: unknown): readonly string[] {

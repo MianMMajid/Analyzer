@@ -122,6 +122,14 @@ export type GitHubPullRequestReviewComment = {
   htmlUrl: string
 }
 
+export type GitHubPullRequestFile = {
+  path: string
+  status: string
+  additions: number
+  deletions: number
+  changes: number
+}
+
 export type GitHubPullRequestDiscussion = {
   reviews: readonly GitHubPullRequestReview[]
   issueComments: readonly GitHubPullRequestIssueComment[]

@@ -7,6 +7,7 @@ import type {
   GitHubCommit,
   GitHubPullRequest,
   GitHubPullRequestDiscussion,
+  GitHubPullRequestFile,
   GitHubPullRequestReview,
 } from '../github/github.types.js'
 import { calculateImpactScore } from './impact.scoring.js'
@@ -20,6 +21,7 @@ export type BuildImpactReportOptions = {
   readonly now?: Date
   readonly service?: GitHubCollectionService
   readonly maxDiscussionPullRequests?: number
+  readonly maxAdoptionPullRequests?: number
 }
 
 type DimensionKey = keyof ImpactScoreBreakdown
@@ -92,11 +94,18 @@ export async function buildImpactReportFromGitHub(options: BuildImpactReportOpti
     .filter((pullRequest) => pullRequest.authorLogin !== undefined)
     .sort((left, right) => scorePullRequestEvidence(right, { since, now }) - scorePullRequestEvidence(left, { since, now }))
     .slice(0, options.maxDiscussionPullRequests ?? 20)
+  const adoptionTargets = [...pullRequests.items]
+    .filter((pullRequest) => pullRequest.authorLogin !== undefined && pullRequest.mergedAt !== undefined)
+    .sort((left, right) => scorePullRequestEvidence(right, { since, now }) - scorePullRequestEvidence(left, { since, now }))
+    .slice(0, options.maxAdoptionPullRequests ?? 50)
+  const fileMap = await fetchFilesForPullRequests(service, adoptionTargets)
 
   for (const pullRequest of discussionTargets) {
     const discussion = await service.fetchPullRequestDiscussion(pullRequest.number, { perPage: 100 })
     addDiscussionSignals(aggregates, pullRequest, discussion, { since, now })
   }
+
+  addPostMergeAdoptionSignals(aggregates, adoptionTargets, fileMap, { since, now })
 
   const rankedAggregates = [...aggregates.values()]
     .filter((aggregate) => aggregate.evidence.length > 0)
@@ -210,6 +219,97 @@ function addDiscussionSignals(
 ): void {
   for (const review of discussion.reviews) {
     addReviewSignal(aggregates, pullRequest, review, window)
+  }
+}
+
+async function fetchFilesForPullRequests(
+  service: GitHubCollectionService,
+  pullRequests: readonly GitHubPullRequest[],
+): Promise<ReadonlyMap<number, readonly GitHubPullRequestFile[]>> {
+  const entries = await Promise.all(
+    pullRequests.map(async (pullRequest) => {
+      const result = await service.fetchPullRequestFiles(pullRequest.number, { perPage: 100 })
+      return [pullRequest.number, result.items] as const
+    }),
+  )
+
+  return new Map(entries)
+}
+
+function addPostMergeAdoptionSignals(
+  aggregates: Map<string, EngineerAggregate>,
+  pullRequests: readonly GitHubPullRequest[],
+  fileMap: ReadonlyMap<number, readonly GitHubPullRequestFile[]>,
+  window: { readonly since: Date; readonly now: Date },
+): void {
+  const mergedPullRequests = pullRequests
+    .filter((pullRequest) => pullRequest.mergedAt !== undefined)
+    .sort((left, right) => new Date(left.mergedAt ?? left.updatedAt).getTime() - new Date(right.mergedAt ?? right.updatedAt).getTime())
+
+  for (const source of mergedPullRequests) {
+    if (source.authorLogin === undefined || source.mergedAt === undefined) {
+      continue
+    }
+
+    const sourceFiles = fileMap.get(source.number) ?? []
+    const sourceFootprint = buildFileFootprint(sourceFiles)
+
+    if (sourceFootprint.paths.size === 0) {
+      continue
+    }
+
+    const adopters = new Set<string>()
+    let exactPathOverlap = 0
+    let areaOverlap = 0
+
+    for (const later of mergedPullRequests) {
+      if (later.number === source.number || later.authorLogin === undefined || later.authorLogin === source.authorLogin) {
+        continue
+      }
+
+      if (new Date(later.mergedAt ?? later.updatedAt).getTime() <= new Date(source.mergedAt).getTime()) {
+        continue
+      }
+
+      const laterFootprint = buildFileFootprint(fileMap.get(later.number) ?? [])
+      const exactOverlap = countIntersection(sourceFootprint.paths, laterFootprint.paths)
+      const sharedAreas = countIntersection(sourceFootprint.areas, laterFootprint.areas)
+
+      if (exactOverlap > 0 || sharedAreas > 0) {
+        adopters.add(later.authorLogin)
+        exactPathOverlap += Math.min(exactOverlap, 3)
+        areaOverlap += exactOverlap > 0 ? 0 : Math.min(sharedAreas, 2)
+      }
+    }
+
+    if (adopters.size === 0) {
+      continue
+    }
+
+    const aggregate = getAggregate(aggregates, { login: source.authorLogin })
+    if (aggregate === undefined) {
+      continue
+    }
+
+    const adoptionStrength = Math.min(34, 14 + Math.min(adopters.size, 3) * 4 + Math.min(exactPathOverlap, 8) * 2 + Math.min(areaOverlap, 4))
+    const dimensions = createZeroBreakdown()
+    dimensions.ownership = adoptionStrength
+    dimensions.technicalLeverage = Math.round(adoptionStrength * 0.72)
+    const primaryArea = [...sourceFootprint.areas][0] ?? classifyPullRequest(source).area
+
+    aggregate.areas.add(primaryArea)
+    addDimensionSignals(aggregate, dimensions, recencyMultiplier(new Date(source.mergedAt), window))
+    aggregate.evidence.push({
+      title: `Post-merge adoption after #${source.number}: ${source.title}`,
+      url: source.htmlUrl,
+      reason: `Later merged work by ${[...adopters].slice(0, 3).join(', ')} touched the same files or product area.`,
+      whyItMatters: 'Post-merge adoption indicates the change created a useful foundation that other engineers built on.',
+      contributionType: 'Post-merge adoption',
+      area: primaryArea,
+      kind: 'contribution_theme',
+      weight: adoptionStrength,
+      occurredAt: source.mergedAt,
+    })
   }
 }
 
@@ -432,6 +532,46 @@ function inferArea(text: string): string {
   if (hasAny(text, ['security', 'auth', 'permission'])) return 'Security'
   if (hasAny(text, ['agent', 'signals', 'runtime'])) return 'Signals and automation'
   return 'Repository-wide'
+}
+
+function inferAreaFromPath(path: string): string {
+  const normalizedPath = path.toLowerCase()
+
+  if (hasAny(normalizedPath, ['queries/', 'insights/', 'hogql', 'charts/', 'analytics'])) return 'Analytics'
+  if (hasAny(normalizedPath, ['.github/', 'ci/', 'pytest', 'tests/', '__tests__/', 'test/'])) return 'CI and testing'
+  if (hasAny(normalizedPath, ['billing', 'usage'])) return 'Billing'
+  if (hasAny(normalizedPath, ['warehouse', 'ingest', 'import', 'batch'])) return 'Data ingestion'
+  if (hasAny(normalizedPath, ['frontend/', 'src/scenes/', 'src/lib/', '.tsx', '.jsx'])) return 'Frontend'
+  if (hasAny(normalizedPath, ['auth', 'security', 'permission'])) return 'Security'
+  if (hasAny(normalizedPath, ['signals', 'agents'])) return 'Signals and automation'
+
+  return topLevelPath(path)
+}
+
+function buildFileFootprint(files: readonly GitHubPullRequestFile[]): {
+  readonly paths: ReadonlySet<string>
+  readonly areas: ReadonlySet<string>
+} {
+  return {
+    paths: new Set(files.map((file) => file.path)),
+    areas: new Set(files.map((file) => inferAreaFromPath(file.path))),
+  }
+}
+
+function countIntersection(left: ReadonlySet<string>, right: ReadonlySet<string>): number {
+  let count = 0
+
+  for (const value of left) {
+    if (right.has(value)) {
+      count += 1
+    }
+  }
+
+  return count
+}
+
+function topLevelPath(path: string): string {
+  return path.split('/')[0] ?? 'Repository-wide'
 }
 
 function scorePullRequestEvidence(
