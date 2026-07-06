@@ -22,9 +22,11 @@ export type BuildImpactReportOptions = {
   readonly service?: GitHubCollectionService
   readonly maxDiscussionPullRequests?: number
   readonly maxAdoptionPullRequests?: number
+  readonly githubRequestConcurrency?: number
 }
 
 type DimensionKey = keyof ImpactScoreBreakdown
+type BreakdownDistributions = Record<DimensionKey, readonly number[]>
 
 type DimensionSignals = {
   readonly customerValue: number[]
@@ -65,11 +67,44 @@ type PullRequestClassification = {
   readonly innovationReach: number
 }
 
+type ScoredPullRequest = {
+  readonly pullRequest: GitHubPullRequest
+  readonly evidenceScore: number
+}
+
+type MergedPullRequest = GitHubPullRequest & {
+  readonly mergedAt: string
+}
+
+type PullRequestFootprint = {
+  readonly paths: ReadonlySet<string>
+  readonly areas: ReadonlySet<string>
+}
+
+type MergedPullRequestFootprint = {
+  readonly pullRequest: MergedPullRequest
+  readonly mergedAtMs: number
+  readonly footprint: PullRequestFootprint
+}
+
+const dimensionKeys = [
+  'customerValue',
+  'technicalLeverage',
+  'riskReduction',
+  'ownership',
+  'collaboration',
+] as const satisfies readonly DimensionKey[]
 const diminishingEvidenceWeights = [1, 0.7, 0.45, 0.25, 0.15] as const
+const defaultGitHubRequestConcurrency = 4
 
 export async function buildImpactReportFromGitHub(options: BuildImpactReportOptions): Promise<ImpactReportRecord> {
   const now = options.now ?? new Date()
   const since = new Date(now.getTime() - options.analysisWindowDays * 24 * 60 * 60 * 1_000)
+  const githubRequestConcurrency = normalizePositiveInteger(
+    options.githubRequestConcurrency ?? defaultGitHubRequestConcurrency,
+    'githubRequestConcurrency',
+  )
+  const window = { since, now }
   const service =
     options.service ??
     createGitHubCollectionService({
@@ -81,39 +116,58 @@ export async function buildImpactReportFromGitHub(options: BuildImpactReportOpti
     service.fetchCommitsSince({ since, until: now, perPage: 100 }),
   ])
   const aggregates = new Map<string, EngineerAggregate>()
+  const scoredPullRequests: ScoredPullRequest[] = []
 
   for (const pullRequest of pullRequests.items) {
-    addPullRequestSignal(aggregates, pullRequest, { since, now })
+    const classification = classifyPullRequest(pullRequest)
+    const evidenceScore = scorePullRequestEvidence(pullRequest, window, classification)
+
+    scoredPullRequests.push({ pullRequest, evidenceScore })
+    addPullRequestSignal(aggregates, pullRequest, classification, evidenceScore, window)
   }
 
   for (const commit of commits.items) {
-    addCommitSignal(aggregates, commit, { since, now })
+    addCommitSignal(aggregates, commit, window)
   }
 
-  const discussionTargets = [...pullRequests.items]
-    .filter((pullRequest) => pullRequest.authorLogin !== undefined)
-    .sort((left, right) => scorePullRequestEvidence(right, { since, now }) - scorePullRequestEvidence(left, { since, now }))
-    .slice(0, options.maxDiscussionPullRequests ?? pullRequests.items.length)
-  const adoptionTargets = [...pullRequests.items]
-    .filter((pullRequest) => pullRequest.authorLogin !== undefined && pullRequest.mergedAt !== undefined)
-    .sort((left, right) => scorePullRequestEvidence(right, { since, now }) - scorePullRequestEvidence(left, { since, now }))
-    .slice(0, options.maxAdoptionPullRequests ?? pullRequests.items.length)
-  const fileMap = await fetchFilesForPullRequests(service, adoptionTargets)
+  scoredPullRequests.sort((left, right) => right.evidenceScore - left.evidenceScore)
+  const discussionTargets = selectTargetPullRequests(
+    scoredPullRequests,
+    (pullRequest) => pullRequest.authorLogin !== undefined,
+    options.maxDiscussionPullRequests,
+    'maxDiscussionPullRequests',
+  )
+  const adoptionTargets = selectTargetPullRequests(
+    scoredPullRequests,
+    (pullRequest) => pullRequest.authorLogin !== undefined && pullRequest.mergedAt !== undefined,
+    options.maxAdoptionPullRequests,
+    'maxAdoptionPullRequests',
+  )
+  const fileMap = await fetchFilesForPullRequests(service, adoptionTargets, githubRequestConcurrency)
+  const discussions = await mapWithConcurrency(
+    discussionTargets,
+    githubRequestConcurrency,
+    async (pullRequest) => ({
+      pullRequest,
+      discussion: await service.fetchPullRequestDiscussion(pullRequest.number, { perPage: 100 }),
+    }),
+  )
 
-  for (const pullRequest of discussionTargets) {
-    const discussion = await service.fetchPullRequestDiscussion(pullRequest.number, { perPage: 100 })
+  for (const { pullRequest, discussion } of discussions) {
     addDiscussionSignals(aggregates, pullRequest, discussion, { since, now })
   }
 
-  addPostMergeAdoptionSignals(aggregates, adoptionTargets, fileMap, { since, now })
+  addPostMergeAdoptionSignals(aggregates, adoptionTargets, fileMap, window)
 
-  const rankedAggregates = [...aggregates.values()]
+  const aggregateBreakdowns = [...aggregates.values()]
     .filter((aggregate) => aggregate.evidence.length > 0)
     .map((aggregate) => ({
       aggregate,
-      breakdown: normalizeBreakdown(buildBaseBreakdown(aggregate), [...aggregates.values()].map(buildBaseBreakdown)),
+      breakdown: buildBaseBreakdown(aggregate),
     }))
-    .map(({ aggregate, breakdown }) => toImpactEngineer(aggregate, breakdown))
+  const breakdownDistributions = buildBreakdownDistributions(aggregateBreakdowns.map(({ breakdown }) => breakdown))
+  const rankedAggregates = aggregateBreakdowns
+    .map(({ aggregate, breakdown }) => toImpactEngineer(aggregate, normalizeBreakdown(breakdown, breakdownDistributions)))
     .sort((left, right) => right.totalScore - left.totalScore)
     .slice(0, 5)
     .map((engineer, index) => ({
@@ -138,6 +192,8 @@ export async function buildImpactReportFromGitHub(options: BuildImpactReportOpti
 function addPullRequestSignal(
   aggregates: Map<string, EngineerAggregate>,
   pullRequest: GitHubPullRequest,
+  classification: PullRequestClassification,
+  evidenceScore: number,
   window: { readonly since: Date; readonly now: Date },
 ): void {
   if (pullRequest.authorLogin === undefined) {
@@ -149,7 +205,6 @@ function addPullRequestSignal(
     return
   }
 
-  const classification = classifyPullRequest(pullRequest)
   const occurredAt = pullRequest.mergedAt ?? pullRequest.closedAt ?? pullRequest.updatedAt
   const recency = recencyMultiplier(new Date(occurredAt), window)
   const issueLinkBonus = pullRequest.linkedIssueNumbers.length > 0 ? 1.12 : 1
@@ -171,7 +226,7 @@ function addPullRequestSignal(
     contributionType: classification.contributionType,
     area: classification.area,
     kind: 'pull_request',
-    weight: scorePullRequestEvidence(pullRequest, window),
+    weight: evidenceScore,
     occurredAt,
   })
 }
@@ -217,23 +272,85 @@ function addDiscussionSignals(
   discussion: GitHubPullRequestDiscussion,
   window: { readonly since: Date; readonly now: Date },
 ): void {
+  const pullRequestClassification = classifyPullRequest(pullRequest)
+
   for (const review of discussion.reviews) {
-    addReviewSignal(aggregates, pullRequest, review, window)
+    addReviewSignal(aggregates, pullRequest, pullRequestClassification, review, window)
   }
+}
+
+function selectTargetPullRequests(
+  scoredPullRequests: readonly ScoredPullRequest[],
+  predicate: (pullRequest: GitHubPullRequest) => boolean,
+  rawLimit: number | undefined,
+  limitName: string,
+): readonly GitHubPullRequest[] {
+  const limit = rawLimit === undefined
+    ? scoredPullRequests.length
+    : normalizeNonNegativeInteger(rawLimit, limitName)
+
+  if (limit === 0) {
+    return []
+  }
+
+  return scoredPullRequests
+    .filter(({ pullRequest }) => predicate(pullRequest))
+    .slice(0, limit)
+    .map(({ pullRequest }) => pullRequest)
+}
+
+async function mapWithConcurrency<Input, Output>(
+  items: readonly Input[],
+  concurrency: number,
+  mapper: (item: Input, index: number) => Promise<Output>,
+): Promise<readonly Output[]> {
+  if (items.length === 0) {
+    return []
+  }
+
+  const results: Array<Output | undefined> = new Array(items.length)
+  const workerCount = Math.min(concurrency, items.length)
+  let nextIndex = 0
+
+  async function worker(): Promise<void> {
+    while (nextIndex < items.length) {
+      const index = nextIndex
+      nextIndex += 1
+      const item = items[index]
+
+      if (item !== undefined) {
+        results[index] = await mapper(item, index)
+      }
+    }
+  }
+
+  await Promise.all(Array.from({ length: workerCount }, worker))
+
+  return results.map((result, index) => {
+    if (result === undefined) {
+      throw new Error(`Concurrent mapper did not produce a result for index ${index}.`)
+    }
+
+    return result
+  })
 }
 
 async function fetchFilesForPullRequests(
   service: GitHubCollectionService,
   pullRequests: readonly GitHubPullRequest[],
+  concurrency: number,
 ): Promise<ReadonlyMap<number, readonly GitHubPullRequestFile[]>> {
-  const entries: Array<readonly [number, readonly GitHubPullRequestFile[]]> = []
-
-  for (const pullRequest of pullRequests) {
+  const entries = await mapWithConcurrency(pullRequests, concurrency, async (pullRequest) => {
     const result = await service.fetchPullRequestFiles(pullRequest.number, { perPage: 100 })
-    entries.push([pullRequest.number, result.items] as const)
-  }
+
+    return [pullRequest.number, result.items] as const
+  })
 
   return new Map(entries)
+}
+
+function hasMergedAt(pullRequest: GitHubPullRequest): pullRequest is MergedPullRequest {
+  return pullRequest.mergedAt !== undefined
 }
 
 function addPostMergeAdoptionSignals(
@@ -243,16 +360,20 @@ function addPostMergeAdoptionSignals(
   window: { readonly since: Date; readonly now: Date },
 ): void {
   const mergedPullRequests = pullRequests
-    .filter((pullRequest) => pullRequest.mergedAt !== undefined)
-    .sort((left, right) => new Date(left.mergedAt ?? left.updatedAt).getTime() - new Date(right.mergedAt ?? right.updatedAt).getTime())
+    .filter(hasMergedAt)
+    .map((pullRequest) => ({
+      pullRequest,
+      mergedAtMs: new Date(pullRequest.mergedAt).getTime(),
+      footprint: buildFileFootprint(fileMap.get(pullRequest.number) ?? []),
+    }))
+    .sort((left, right) => left.mergedAtMs - right.mergedAtMs) satisfies readonly MergedPullRequestFootprint[]
 
-  for (const source of mergedPullRequests) {
-    if (source.authorLogin === undefined || source.mergedAt === undefined) {
+  for (const sourceEntry of mergedPullRequests) {
+    const { footprint: sourceFootprint, pullRequest: source } = sourceEntry
+
+    if (source.authorLogin === undefined) {
       continue
     }
-
-    const sourceFiles = fileMap.get(source.number) ?? []
-    const sourceFootprint = buildFileFootprint(sourceFiles)
 
     if (sourceFootprint.paths.size === 0) {
       continue
@@ -262,16 +383,17 @@ function addPostMergeAdoptionSignals(
     let exactPathOverlap = 0
     let areaOverlap = 0
 
-    for (const later of mergedPullRequests) {
+    for (const laterEntry of mergedPullRequests) {
+      const { footprint: laterFootprint, pullRequest: later } = laterEntry
+
       if (later.number === source.number || later.authorLogin === undefined || later.authorLogin === source.authorLogin) {
         continue
       }
 
-      if (new Date(later.mergedAt ?? later.updatedAt).getTime() <= new Date(source.mergedAt).getTime()) {
+      if (laterEntry.mergedAtMs <= sourceEntry.mergedAtMs) {
         continue
       }
 
-      const laterFootprint = buildFileFootprint(fileMap.get(later.number) ?? [])
       const exactOverlap = countIntersection(sourceFootprint.paths, laterFootprint.paths)
       const sharedAreas = countIntersection(sourceFootprint.areas, laterFootprint.areas)
 
@@ -316,6 +438,7 @@ function addPostMergeAdoptionSignals(
 function addReviewSignal(
   aggregates: Map<string, EngineerAggregate>,
   pullRequest: GitHubPullRequest,
+  pullRequestClassification: PullRequestClassification,
   review: GitHubPullRequestReview,
   window: { readonly since: Date; readonly now: Date },
 ): void {
@@ -329,7 +452,6 @@ function addReviewSignal(
   }
 
   const reviewQuality = scoreReviewQuality(review)
-  const pullRequestClassification = classifyPullRequest(pullRequest)
   const occurredAt = review.submittedAt ?? pullRequest.updatedAt
   const dimensions = createZeroBreakdown()
   dimensions.collaboration = reviewQuality
@@ -393,9 +515,7 @@ function getAggregate(
 }
 
 function toImpactEngineer(aggregate: EngineerAggregate, breakdown: ImpactScoreBreakdown): ImpactEngineer {
-  const evidence = aggregate.evidence
-    .sort((left, right) => right.weight - left.weight)
-    .slice(0, 3)
+  const evidence = selectTopItems(aggregate.evidence, 3, (candidate, selected) => candidate.weight > selected.weight)
     .map(({ weight: _weight, occurredAt: _occurredAt, ...item }) => item)
   const primaryArea = [...aggregate.areas][0] ?? 'Repository-wide'
   const totalScore = calculateImpactScore(breakdown)
@@ -427,25 +547,65 @@ function buildBaseBreakdown(aggregate: EngineerAggregate): ImpactScoreBreakdown 
   }
 }
 
-function normalizeBreakdown(base: ImpactScoreBreakdown, allBreakdowns: readonly ImpactScoreBreakdown[]): ImpactScoreBreakdown {
+function buildBreakdownDistributions(allBreakdowns: readonly ImpactScoreBreakdown[]): BreakdownDistributions {
+  const distributions: Record<DimensionKey, number[]> = {
+    customerValue: [],
+    technicalLeverage: [],
+    riskReduction: [],
+    ownership: [],
+    collaboration: [],
+  }
+
+  for (const breakdown of allBreakdowns) {
+    for (const dimension of dimensionKeys) {
+      distributions[dimension].push(breakdown[dimension])
+    }
+  }
+
+  for (const dimension of dimensionKeys) {
+    distributions[dimension].sort((left, right) => left - right)
+  }
+
+  return distributions
+}
+
+function normalizeBreakdown(base: ImpactScoreBreakdown, distributions: BreakdownDistributions): ImpactScoreBreakdown {
   return {
-    customerValue: normalizeDimension(base.customerValue, allBreakdowns.map((breakdown) => breakdown.customerValue)),
-    technicalLeverage: normalizeDimension(base.technicalLeverage, allBreakdowns.map((breakdown) => breakdown.technicalLeverage)),
-    riskReduction: normalizeDimension(base.riskReduction, allBreakdowns.map((breakdown) => breakdown.riskReduction)),
-    ownership: normalizeDimension(base.ownership, allBreakdowns.map((breakdown) => breakdown.ownership)),
-    collaboration: normalizeDimension(base.collaboration, allBreakdowns.map((breakdown) => breakdown.collaboration)),
+    customerValue: normalizeDimension(base.customerValue, distributions.customerValue),
+    technicalLeverage: normalizeDimension(base.technicalLeverage, distributions.technicalLeverage),
+    riskReduction: normalizeDimension(base.riskReduction, distributions.riskReduction),
+    ownership: normalizeDimension(base.ownership, distributions.ownership),
+    collaboration: normalizeDimension(base.collaboration, distributions.collaboration),
   }
 }
 
-function normalizeDimension(value: number, values: readonly number[]): number {
+function normalizeDimension(value: number, sortedValues: readonly number[]): number {
   if (value <= 0) {
     return 0
   }
 
-  const lowerOrEqualCount = values.filter((candidate) => candidate <= value).length
-  const percentile = values.length <= 1 ? 1 : (lowerOrEqualCount - 1) / (values.length - 1)
+  const lowerOrEqualCount = countLowerOrEqual(sortedValues, value)
+  const percentile = sortedValues.length <= 1 ? 1 : (lowerOrEqualCount - 1) / (sortedValues.length - 1)
 
   return capScore(value * 0.75 + (45 + percentile * 45) * 0.25)
+}
+
+function countLowerOrEqual(sortedValues: readonly number[], value: number): number {
+  let low = 0
+  let high = sortedValues.length
+
+  while (low < high) {
+    const middle = Math.floor((low + high) / 2)
+    const candidate = sortedValues[middle]
+
+    if (candidate !== undefined && candidate <= value) {
+      low = middle + 1
+    } else {
+      high = middle
+    }
+  }
+
+  return low
 }
 
 function scoreDimension(values: readonly number[]): number {
@@ -453,22 +613,52 @@ function scoreDimension(values: readonly number[]): number {
     return 0
   }
 
-  const weightedEvidence = [...values]
-    .sort((left, right) => right - left)
-    .slice(0, diminishingEvidenceWeights.length)
+  const weightedEvidence = selectTopItems(values, diminishingEvidenceWeights.length, (candidate, selected) => candidate > selected)
     .reduce((total, value, index) => total + value * (diminishingEvidenceWeights[index] ?? 0), 0)
 
   return capScore(20 + weightedEvidence)
 }
 
 function addDimensionSignals(aggregate: EngineerAggregate, dimensions: ImpactScoreBreakdown, multiplier: number): void {
-  for (const dimension of Object.keys(dimensions) as DimensionKey[]) {
+  for (const dimension of dimensionKeys) {
     const value = dimensions[dimension]
 
     if (value > 0) {
       aggregate.signals[dimension].push(Math.min(35, Math.round(value * multiplier)))
     }
   }
+}
+
+function selectTopItems<Item>(
+  items: readonly Item[],
+  limit: number,
+  isBetter: (candidate: Item, selected: Item) => boolean,
+): readonly Item[] {
+  const selected: Item[] = []
+
+  if (limit <= 0) {
+    return selected
+  }
+
+  for (const item of items) {
+    const insertAt = selected.findIndex((selectedItem) => isBetter(item, selectedItem))
+
+    if (insertAt === -1) {
+      if (selected.length < limit) {
+        selected.push(item)
+      }
+
+      continue
+    }
+
+    selected.splice(insertAt, 0, item)
+
+    if (selected.length > limit) {
+      selected.pop()
+    }
+  }
+
+  return selected
 }
 
 function classifyPullRequest(pullRequest: GitHubPullRequest): PullRequestClassification {
@@ -548,21 +738,25 @@ function inferAreaFromPath(path: string): string {
   return topLevelPath(path)
 }
 
-function buildFileFootprint(files: readonly GitHubPullRequestFile[]): {
-  readonly paths: ReadonlySet<string>
-  readonly areas: ReadonlySet<string>
-} {
-  return {
-    paths: new Set(files.map((file) => file.path)),
-    areas: new Set(files.map((file) => inferAreaFromPath(file.path))),
+function buildFileFootprint(files: readonly GitHubPullRequestFile[]): PullRequestFootprint {
+  const paths = new Set<string>()
+  const areas = new Set<string>()
+
+  for (const file of files) {
+    paths.add(file.path)
+    areas.add(inferAreaFromPath(file.path))
   }
+
+  return { paths, areas }
 }
 
 function countIntersection(left: ReadonlySet<string>, right: ReadonlySet<string>): number {
   let count = 0
+  const smaller = left.size <= right.size ? left : right
+  const larger = left.size <= right.size ? right : left
 
-  for (const value of left) {
-    if (right.has(value)) {
+  for (const value of smaller) {
+    if (larger.has(value)) {
       count += 1
     }
   }
@@ -571,14 +765,16 @@ function countIntersection(left: ReadonlySet<string>, right: ReadonlySet<string>
 }
 
 function topLevelPath(path: string): string {
-  return path.split('/')[0] ?? 'Repository-wide'
+  const slashIndex = path.indexOf('/')
+
+  return slashIndex === -1 ? path || 'Repository-wide' : path.slice(0, slashIndex)
 }
 
 function scorePullRequestEvidence(
   pullRequest: GitHubPullRequest,
   window: { readonly since: Date; readonly now: Date },
+  classification: PullRequestClassification,
 ): number {
-  const classification = classifyPullRequest(pullRequest)
   const occurredAt = pullRequest.mergedAt ?? pullRequest.closedAt ?? pullRequest.updatedAt
   const baseStrength = Math.max(...Object.values(classification.dimensions))
   const issueLinkBonus = pullRequest.linkedIssueNumbers.length > 0 ? 4 : 0
@@ -712,6 +908,22 @@ function toDisplayName(displayName: string, login: string): string {
 
 function hasAny(text: string, needles: readonly string[]): boolean {
   return needles.some((needle) => text.includes(needle))
+}
+
+function normalizePositiveInteger(value: number, name: string): number {
+  if (!Number.isInteger(value) || value < 1) {
+    throw new Error(`${name} must be a positive integer.`)
+  }
+
+  return value
+}
+
+function normalizeNonNegativeInteger(value: number, name: string): number {
+  if (!Number.isInteger(value) || value < 0) {
+    throw new Error(`${name} must be a non-negative integer.`)
+  }
+
+  return value
 }
 
 function capScore(score: number): number {
