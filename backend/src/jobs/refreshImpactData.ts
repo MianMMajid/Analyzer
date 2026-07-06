@@ -15,7 +15,7 @@ export async function refreshImpactData(environment: BackendEnvironment = backen
     throw new Error('DATABASE_URL is required to refresh and persist impact data.')
   }
 
-  if (environment.githubToken === undefined) {
+  if (environment.githubToken === undefined && environment.isProduction) {
     throw new Error('GITHUB_TOKEN is required to refresh impact data from GitHub.')
   }
 
@@ -28,7 +28,7 @@ export async function refreshImpactData(environment: BackendEnvironment = backen
   const report = await buildImpactReportFromGitHub({
     repository: environment.githubRepository,
     analysisWindowDays: environment.analysisWindowDays,
-    githubToken: environment.githubToken,
+    ...(environment.githubToken === undefined ? {} : { githubToken: environment.githubToken }),
   })
   const reportId = await saveImpactReport(pool, report)
 
@@ -39,9 +39,48 @@ export async function refreshImpactData(environment: BackendEnvironment = backen
   }
 }
 
+async function runScheduledRefresh(environment: BackendEnvironment): Promise<void> {
+  const intervalMs = environment.refreshIntervalMs
+
+  if (intervalMs === undefined) {
+    throw new Error('REFRESH_INTERVAL_MS is required for scheduled impact refresh.')
+  }
+
+  let isRefreshing = false
+
+  async function tick(): Promise<void> {
+    if (isRefreshing) {
+      console.warn('Skipping impact refresh because the previous refresh is still running.')
+      return
+    }
+
+    isRefreshing = true
+
+    try {
+      const result = await refreshImpactData(environment)
+      console.log(
+        `Impact refresh complete. reportId=${result.reportId} engineers=${result.engineerCount} generatedAt=${result.generatedAt}`,
+      )
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : 'Unknown refresh error')
+    } finally {
+      isRefreshing = false
+    }
+  }
+
+  await tick()
+  setInterval(() => {
+    void tick()
+  }, intervalMs)
+}
+
 if (process.env['NODE_ENV'] !== 'test') {
-  const result = await refreshImpactData()
-  console.log(
-    `Impact refresh complete. reportId=${result.reportId} engineers=${result.engineerCount} generatedAt=${result.generatedAt}`,
-  )
+  if (backendEnvironment.refreshIntervalMs === undefined) {
+    const result = await refreshImpactData()
+    console.log(
+      `Impact refresh complete. reportId=${result.reportId} engineers=${result.engineerCount} generatedAt=${result.generatedAt}`,
+    )
+  } else {
+    await runScheduledRefresh(backendEnvironment)
+  }
 }

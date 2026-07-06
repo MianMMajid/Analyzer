@@ -11,6 +11,8 @@ Create these Railway services:
 - `frontend`: Vite frontend.
 - `refresh`: worker/scheduled job that writes real GitHub data to PostgreSQL.
 
+The refresh service should run continuously with `REFRESH_INTERVAL_MS=60000` for the requested one-minute latest-feed cadence. The job has an overlap guard, so if one GitHub ingestion run takes longer than a minute, the next tick is skipped instead of starting a duplicate refresh.
+
 ## Required Secrets
 
 - `GITHUB_TOKEN`: GitHub token with enough rate limit for `PostHog/posthog` ingestion.
@@ -69,6 +71,7 @@ railway variable set --service refresh \
   NODE_ENV=production \
   GITHUB_REPOSITORY=PostHog/posthog \
   ANALYSIS_WINDOW_DAYS=90 \
+  REFRESH_INTERVAL_MS=60000 \
   DATABASE_URL='${{postgres.DATABASE_URL}}' \
   NIXPACKS_BUILD_CMD='npm run build:refresh' \
   NIXPACKS_START_CMD='npm run start:refresh'
