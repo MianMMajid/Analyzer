@@ -22,6 +22,32 @@ The dashboard should answer:
 Who had the most meaningful engineering impact recently, and what evidence supports that ranking?
 ```
 
+## Technical Approach And Methodology
+
+The application is a production React + strict TypeScript dashboard backed by a Fastify API and Railway PostgreSQL. The backend ingests PostHog GitHub activity, normalizes contributors, scores engineering impact, stores precomputed reports, and serves the latest completed report to keep dashboard reads fast.
+
+Impact is scored across five weighted dimensions:
+
+- Customer value: 30%
+- Technical leverage: 25%
+- Risk reduction: 20%
+- Ownership: 15%
+- Collaboration: 10%
+
+The ranking avoids raw volume scoring. Pull requests, commits, reviews, comments, changed files, labels, linked issues, post-merge adoption, recency, affected product areas, and evidence quality contribute to capped dimension scores. Counts are retained as diagnostics, not as the primary ranking driver.
+
+Technical aspects used:
+
+- Frontend: React, Vite, strict TypeScript, WorkWeave-inspired glass UI, filters, bar chart, line chart, clickable engineer drill-downs, and live freshness status.
+- Backend: Fastify, strict TypeScript, Zod validation, versioned JSON API, CORS, rate limiting, health/readiness routes, and structured request logging.
+- Contracts: shared `@repo/impact-contract` Zod schemas used by frontend and backend to prevent API drift.
+- Data: Railway PostgreSQL stores impact reports, engineers, evidence, and ingestion metadata.
+- Queueing: `pg-boss` runs refresh jobs through PostgreSQL with singleton dedupe, retries, exponential backoff, and a dead-letter queue.
+- GitHub ingestion: paginated and bounded collection for PRs, commits, reviews, comments, changed files, linked issues, and adoption signals across the 90-day analysis window.
+- Contributor safety: identity normalization covers GitHub logins, email aliases, noreply emails, co-authors, bots, diacritics, and ambiguous identities.
+- Performance: the user-facing API reads precomputed reports instead of running GitHub analysis synchronously, keeping average response latency near the 150ms target.
+- Testing and quality: Vitest coverage for contracts, backend scoring/ingestion/API/database behavior, frontend API parsing/components, plus `npm run check` for typecheck, lint, and build.
+
 ## Current State
 
 Implemented:
