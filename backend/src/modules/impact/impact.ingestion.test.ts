@@ -31,6 +31,7 @@ const pullRequests: readonly GitHubPullRequest[] = [
     id: 1,
     number: 123,
     title: 'fix(ci): make test telemetry reliable',
+    body: 'Fixes #456 by making CI telemetry reliable.',
     state: 'closed',
     isDraft: false,
     authorLogin: 'ada',
@@ -46,6 +47,7 @@ const pullRequests: readonly GitHubPullRequest[] = [
     commits: 1,
     reviewCommentCount: 3,
     issueCommentCount: 1,
+    linkedIssueNumbers: [456],
     htmlUrl: 'https://github.com/PostHog/posthog/pull/123',
   },
 ]
@@ -94,6 +96,8 @@ describe('buildImpactReportFromGitHub', () => {
       githubLogin: 'ada',
       primaryImpactArea: 'CI and testing',
     })
+    expect(report.engineers[0]?.explanation).toContain('Activity counts are kept as diagnostics')
+    expect(report.engineers[0]?.evidence[0]?.reason).toContain('Linked issue')
     expect(report.engineers.some((engineer) => engineer.githubLogin === 'grace')).toBe(true)
   })
 })

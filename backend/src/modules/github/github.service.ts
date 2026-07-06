@@ -286,6 +286,7 @@ function normalizePullRequest(value: unknown): GitHubPullRequest {
     id: requireNumber(record, 'id', 'pull_request.id'),
     number: requireNumber(record, 'number', 'pull_request.number'),
     title: requireString(record, 'title', 'pull_request.title'),
+    body: readString(record, 'body') ?? '',
     state: normalizePullRequestState(requireString(record, 'state', 'pull_request.state')),
     isDraft: requireBoolean(record, 'draft', 'pull_request.draft'),
     createdAt: requireString(record, 'created_at', 'pull_request.created_at'),
@@ -299,6 +300,7 @@ function normalizePullRequest(value: unknown): GitHubPullRequest {
     commits: readNumber(record, 'commits') ?? 0,
     reviewCommentCount: readNumber(record, 'review_comments') ?? 0,
     issueCommentCount: readNumber(record, 'comments') ?? 0,
+    linkedIssueNumbers: extractLinkedIssueNumbers(`${requireString(record, 'title', 'pull_request.title')}\n${readString(record, 'body') ?? ''}`),
     htmlUrl: requireString(record, 'html_url', 'pull_request.html_url'),
   }
 
@@ -486,4 +488,21 @@ function setOptionalString<Target extends object, Key extends keyof Target>(
   if (typeof value === 'string' && value.length > 0) {
     target[key] = value as Target[Key]
   }
+}
+
+function extractLinkedIssueNumbers(text: string): readonly number[] {
+  const issues = new Set<number>()
+  const pattern = /\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#(?<issue>\d+)/giu
+  let match = pattern.exec(text)
+
+  while (match !== null) {
+    const issue = Number(match.groups?.['issue'])
+    if (Number.isInteger(issue) && issue > 0) {
+      issues.add(issue)
+    }
+
+    match = pattern.exec(text)
+  }
+
+  return [...issues].sort((left, right) => left - right)
 }
