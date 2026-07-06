@@ -94,9 +94,12 @@ describe('getImpactDashboard', () => {
 
   it('wraps network failures before a response is available', async () => {
     const networkError = new TypeError('fetch failed')
-    vi.stubGlobal('fetch', vi.fn(async () => {
-      throw networkError
-    }))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw networkError
+      }),
+    )
 
     await expect(getImpactDashboard()).rejects.toMatchObject({
       name: 'ImpactApiError',

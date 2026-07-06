@@ -211,13 +211,13 @@ The frontend must poll the summary API every 60 seconds so the page reflects the
 
 Engineer impact is defined as a weighted combination of meaningful contribution signals:
 
-| Dimension | Weight | Meaning |
-| --- | ---: | --- |
-| Customer Value | 30% | User-facing features, fixes, workflow improvements, and product outcomes. |
-| Technical Leverage | 25% | Infrastructure, platform, testing, observability, performance, and developer productivity work. |
-| Risk Reduction | 20% | Reliability, regressions, security, migrations, correctness, and operational stability. |
-| Ownership | 15% | Sustained responsibility across important areas instead of isolated activity spikes. |
-| Collaboration | 10% | Reviews, cross-team support, unblocking others, and work across ownership boundaries. |
+| Dimension          | Weight | Meaning                                                                                         |
+| ------------------ | -----: | ----------------------------------------------------------------------------------------------- |
+| Customer Value     |    30% | User-facing features, fixes, workflow improvements, and product outcomes.                       |
+| Technical Leverage |    25% | Infrastructure, platform, testing, observability, performance, and developer productivity work. |
+| Risk Reduction     |    20% | Reliability, regressions, security, migrations, correctness, and operational stability.         |
+| Ownership          |    15% | Sustained responsibility across important areas instead of isolated activity spikes.            |
+| Collaboration      |    10% | Reviews, cross-team support, unblocking others, and work across ownership boundaries.           |
 
 Every ranked engineer must include:
 
@@ -537,21 +537,21 @@ These should be collected and stored for analysis but hidden from the default da
 
 ### Metric Source Map
 
-| Metric Group | Main Source |
-| --- | --- |
-| PR activity | GitHub pull requests API |
-| Reviews | GitHub pull request reviews API |
-| Review comments | GitHub pull request review comments API |
-| Changed files | GitHub PR files API |
-| Commits | GitHub commits API |
-| Labels | GitHub issues and PR metadata |
-| Code areas | Changed file paths |
-| Ownership | Historical contribution distribution |
-| Flow | PR timestamps and review timestamps |
-| Risk reduction | Labels, titles, descriptions, paths, and contribution classifier |
-| Customer value | Labels, titles, descriptions, product paths, and linked issues |
-| Technical leverage | Paths, labels, titles, and infrastructure/tooling classifiers |
-| Collaboration | Reviews, comments, authors reviewed, and cross-area participation |
+| Metric Group       | Main Source                                                       |
+| ------------------ | ----------------------------------------------------------------- |
+| PR activity        | GitHub pull requests API                                          |
+| Reviews            | GitHub pull request reviews API                                   |
+| Review comments    | GitHub pull request review comments API                           |
+| Changed files      | GitHub PR files API                                               |
+| Commits            | GitHub commits API                                                |
+| Labels             | GitHub issues and PR metadata                                     |
+| Code areas         | Changed file paths                                                |
+| Ownership          | Historical contribution distribution                              |
+| Flow               | PR timestamps and review timestamps                               |
+| Risk reduction     | Labels, titles, descriptions, paths, and contribution classifier  |
+| Customer value     | Labels, titles, descriptions, product paths, and linked issues    |
+| Technical leverage | Paths, labels, titles, and infrastructure/tooling classifiers     |
+| Collaboration      | Reviews, comments, authors reviewed, and cross-area participation |
 
 ### Metric Storage Rule
 
@@ -935,13 +935,13 @@ The average API response time for dashboard reads must stay under 150ms.
 
 Performance target:
 
-| Metric | Target |
-| --- | ---: |
-| Average API latency | < 150ms |
-| p95 API latency | < 300ms |
-| p99 API latency | < 500ms |
-| Dashboard summary payload | < 75KB |
-| Request path GitHub API calls | 0 |
+| Metric                        |  Target |
+| ----------------------------- | ------: |
+| Average API latency           | < 150ms |
+| p95 API latency               | < 300ms |
+| p99 API latency               | < 500ms |
+| Dashboard summary payload     |  < 75KB |
+| Request path GitHub API calls |       0 |
 
 The 150ms target applies to backend API communication after the request reaches the backend. Full browser page load can be slower due to network, frontend assets, and Railway cold starts.
 
@@ -1790,13 +1790,13 @@ Backend rules:
 
 Required files:
 
-| File | Purpose |
-| --- | --- |
-| `backend/.env.example` | Backend env vars and required production secrets. |
-| `frontend/.env.example` | Frontend public Vite env vars. |
-| `railway.toml` | Railway build/deploy defaults. |
-| `.github/workflows/ci.yml` | CI quality gate. |
-| `.gitignore` | Prevent `.data`, `.env`, `dist`, and dependencies from being committed. |
+| File                       | Purpose                                                                 |
+| -------------------------- | ----------------------------------------------------------------------- |
+| `backend/.env.example`     | Backend env vars and required production secrets.                       |
+| `frontend/.env.example`    | Frontend public Vite env vars.                                          |
+| `railway.toml`             | Railway build/deploy defaults.                                          |
+| `.github/workflows/ci.yml` | CI quality gate.                                                        |
+| `.gitignore`               | Prevent `.data`, `.env`, `dist`, and dependencies from being committed. |
 
 Health endpoints:
 

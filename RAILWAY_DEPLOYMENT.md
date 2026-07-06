@@ -17,6 +17,7 @@ The refresh service should run continuously with `REFRESH_INTERVAL_MS=60000` for
 
 - `GITHUB_TOKEN`: GitHub token with enough rate limit for `PostHog/posthog` ingestion.
 - `DATABASE_URL`: use the Railway Postgres service reference.
+- `DATABASE_SSL_MODE`: set to `require` if Railway's Postgres connection requires TLS.
 - `WEB_ORIGIN`: deployed frontend URL.
 - `VITE_API_BASE_URL`: deployed backend URL.
 
@@ -48,6 +49,7 @@ railway variable set --service backend \
   API_AVERAGE_LATENCY_TARGET_MS=150 \
   NIXPACKS_NODE_VERSION=24 \
   DATABASE_URL='${{postgres.DATABASE_URL}}' \
+  DATABASE_SSL_MODE=require \
   NIXPACKS_BUILD_CMD='npm run build:backend' \
   NIXPACKS_START_CMD='npm run start:backend'
 
@@ -75,8 +77,10 @@ railway variable set --service refresh \
   GITHUB_REPOSITORY=PostHog/posthog \
   ANALYSIS_WINDOW_DAYS=90 \
   REFRESH_INTERVAL_MS=60000 \
+  QUEUE_DRIVER=pg-boss \
   NIXPACKS_NODE_VERSION=24 \
   DATABASE_URL='${{postgres.DATABASE_URL}}' \
+  DATABASE_SSL_MODE=require \
   NIXPACKS_BUILD_CMD='npm run build:refresh' \
   NIXPACKS_START_CMD='npm run start:refresh'
 
@@ -91,10 +95,15 @@ railway up --service frontend
 railway up --service refresh
 ```
 
-Apply migrations and seed the first real report:
+The backend start command runs compiled SQL migrations automatically. To force migrations manually or recover after an interrupted deploy, run:
 
 ```bash
 railway run --service backend npm run railway:migrate
+```
+
+Seed the first real report:
+
+```bash
 railway run --service backend npm run railway:refresh
 ```
 

@@ -9,6 +9,13 @@ describe('parseBackendEnvironment', () => {
       githubRepository: 'PostHog/posthog',
       analysisWindowDays: 90,
       apiAverageLatencyTargetMs: 150,
+      databaseSslMode: 'disable',
+    })
+  })
+
+  it('parses database SSL mode for managed Postgres deployments', () => {
+    expect(parseBackendEnvironment({ DATABASE_SSL_MODE: 'require' })).toMatchObject({
+      databaseSslMode: 'require',
     })
   })
 

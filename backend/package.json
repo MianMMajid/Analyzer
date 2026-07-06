@@ -16,10 +16,13 @@
     "refresh": "tsx src/jobs/refreshImpactData.ts",
     "export:posthog-90d": "tsx src/jobs/exportPosthogBranchesAndCommits.ts",
     "pretest": "npm run build -w @repo/impact-contract",
-    "test": "vitest run"
+    "test": "vitest run",
+    "precoverage": "npm run build -w @repo/impact-contract",
+    "coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@fastify/cors": "^11.2.0",
+    "@fastify/helmet": "^13.0.2",
     "@fastify/rate-limit": "^10.3.0",
     "@repo/impact-contract": "0.0.0",
     "fastify": "^5.6.2",

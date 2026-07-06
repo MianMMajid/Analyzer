@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { ImpactEngineerSchema } from '@repo/impact-contract'
 import { backendEnvironment, type BackendEnvironment } from '../../config/env.js'
-import { getSharedDatabasePool } from '../../db/client.js'
+import { buildDatabasePoolOptions, getSharedDatabasePool } from '../../db/client.js'
 import { databaseTables } from '../../db/schema.js'
 import { type Queryable, type TransactionPool, withTransaction } from '../../db/transaction.js'
 import { seedAnalysisWindow, seedImpactEngineers, seedReportGeneratedAt } from './impact.data.js'
@@ -42,7 +42,9 @@ export class NoImpactReportError extends Error {
   readonly statusCode = 503
 
   constructor(repository: string, analysisWindowDays: number) {
-    super(`No completed impact report exists for ${repository} over ${analysisWindowDays} days. Run the refresh job before serving production traffic.`)
+    super(
+      `No completed impact report exists for ${repository} over ${analysisWindowDays} days. Run the refresh job before serving production traffic.`,
+    )
     this.name = 'NoImpactReportError'
   }
 }
@@ -54,11 +56,20 @@ export async function getLatestImpactReport(
     return seedImpactReport
   }
 
-  const pool = getSharedDatabasePool({
-    databaseUrl: environment.databaseUrl,
-    applicationName: 'posthog-impact-api',
-  })
-  const report = await getLatestPersistedImpactReport(pool, environment.githubRepository, environment.analysisWindowDays)
+  const pool = getSharedDatabasePool(
+    buildDatabasePoolOptions(
+      {
+        databaseUrl: environment.databaseUrl,
+        databaseSslMode: environment.databaseSslMode,
+      },
+      'posthog-impact-api',
+    ),
+  )
+  const report = await getLatestPersistedImpactReport(
+    pool,
+    environment.githubRepository,
+    environment.analysisWindowDays,
+  )
 
   if (report !== null) {
     return report

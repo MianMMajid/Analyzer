@@ -37,7 +37,12 @@ export function DimensionLineChart({ engineer }: DimensionLineChartProps) {
       <p className="chart-panel__summary" id={descriptionId}>
         {summary}
       </p>
-      <svg className="line-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`${engineer.name} dimension score profile`}>
+      <svg
+        className="line-chart"
+        viewBox={`0 0 ${width} ${height}`}
+        role="img"
+        aria-label={`${engineer.name} dimension score profile`}
+      >
         <title>{engineer.name} dimension score profile</title>
         <desc>{summary}</desc>
         {[0, 25, 50, 75, 100].map((tick) => {

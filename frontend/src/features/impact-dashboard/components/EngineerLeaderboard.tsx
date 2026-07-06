@@ -7,11 +7,7 @@ type EngineerLeaderboardProps = {
 }
 
 // The leaderboard is interactive but delegates detailed evidence to the panel.
-export function EngineerLeaderboard({
-  engineers,
-  onSelectEngineer,
-  selectedEngineerId,
-}: EngineerLeaderboardProps) {
+export function EngineerLeaderboard({ engineers, onSelectEngineer, selectedEngineerId }: EngineerLeaderboardProps) {
   return (
     <div className="leaderboard-list" aria-label="Top five engineers">
       {engineers.map((engineer) => (

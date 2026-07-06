@@ -35,10 +35,8 @@ const candidateEngineers = [
       {
         title: 'fix(frontend): clear the ByRole name-query backlog, flip semgrep rule to blocking (#68740)',
         url: 'https://github.com/PostHog/posthog/pull/68740',
-        reason:
-          'Turns a recurring frontend test reliability problem into an enforceable guardrail.',
-        whyItMatters:
-          'Faster, more reliable tests compound across the whole PostHog frontend team.',
+        reason: 'Turns a recurring frontend test reliability problem into an enforceable guardrail.',
+        whyItMatters: 'Faster, more reliable tests compound across the whole PostHog frontend team.',
         contributionType: 'Technical leverage',
         area: 'Frontend',
         kind: 'pull_request',
@@ -46,10 +44,8 @@ const candidateEngineers = [
       {
         title: 'fix(logs): stop cloning every log per live-tail tick (#68547)',
         url: 'https://github.com/PostHog/posthog/pull/68547',
-        reason:
-          'Targets runtime waste in a live operational workflow rather than producing cosmetic churn.',
-        whyItMatters:
-          'Live-tail responsiveness affects customers debugging production behavior in PostHog.',
+        reason: 'Targets runtime waste in a live operational workflow rather than producing cosmetic churn.',
+        whyItMatters: 'Live-tail responsiveness affects customers debugging production behavior in PostHog.',
         contributionType: 'Risk reduction',
         area: 'Logs',
         kind: 'pull_request',
@@ -58,8 +54,7 @@ const candidateEngineers = [
         title: 'feat(lib): add reconcileById identity-preserving list reconciliation (#68526)',
         url: 'https://github.com/PostHog/posthog/pull/68526',
         reason: 'Creates a reusable primitive that prevents repeated UI state bugs.',
-        whyItMatters:
-          'Shared reconciliation logic reduces future regressions across dynamic lists and panels.',
+        whyItMatters: 'Shared reconciliation logic reduces future regressions across dynamic lists and panels.',
         contributionType: 'Technical leverage',
         area: 'Frontend platform',
         kind: 'pull_request',
@@ -90,10 +85,8 @@ const candidateEngineers = [
       {
         title: 'fix(quill-charts): right y-axis rendering and per-axis, per-edge axis config (#68736)',
         url: 'https://github.com/PostHog/posthog/pull/68736',
-        reason:
-          'Fixes chart rendering correctness in a surface customers use to interpret product data.',
-        whyItMatters:
-          'A misleading axis can invalidate customer analysis even when the underlying data is correct.',
+        reason: 'Fixes chart rendering correctness in a surface customers use to interpret product data.',
+        whyItMatters: 'A misleading axis can invalidate customer analysis even when the underlying data is correct.',
         contributionType: 'Customer value',
         area: 'Analytics charts',
         kind: 'pull_request',
@@ -112,8 +105,7 @@ const candidateEngineers = [
         title: 'feat(insights): enable refreshed quill chart styling behind a feature flag (#67779)',
         url: 'https://github.com/PostHog/posthog/pull/67779',
         reason: 'Ships visible UX improvement through a controlled rollout path.',
-        whyItMatters:
-          'Feature-flagged rollout balances customer value with safety for a central analytics workflow.',
+        whyItMatters: 'Feature-flagged rollout balances customer value with safety for a central analytics workflow.',
         contributionType: 'Risk reduction',
         area: 'Insights',
         kind: 'pull_request',
@@ -155,8 +147,7 @@ const candidateEngineers = [
         title: 'feat(hogli): add ci:preflight pre-push hook, checks, and telemetry (#65581)',
         url: 'https://github.com/PostHog/posthog/pull/65581',
         reason: 'Moves quality feedback earlier in the workflow and instruments the system.',
-        whyItMatters:
-          'Earlier feedback prevents wasted review cycles and helps the team improve CI with evidence.',
+        whyItMatters: 'Earlier feedback prevents wasted review cycles and helps the team improve CI with evidence.',
         contributionType: 'Technical leverage',
         area: 'Developer tooling',
         kind: 'pull_request',
@@ -165,8 +156,7 @@ const candidateEngineers = [
         title: 'fix(ci): capture pytest reruns in CI test telemetry (#67904)',
         url: 'https://github.com/PostHog/posthog/pull/67904',
         reason: 'Makes flaky or retry-heavy test behavior visible.',
-        whyItMatters:
-          'Reliable telemetry is a prerequisite for reducing engineering drag from test instability.',
+        whyItMatters: 'Reliable telemetry is a prerequisite for reducing engineering drag from test instability.',
         contributionType: 'Technical leverage',
         area: 'Testing',
         kind: 'pull_request',
@@ -198,8 +188,7 @@ const candidateEngineers = [
         title: 'fix(batch-import-worker): detect still-compressed import data with disambiguated errors (#68741)',
         url: 'https://github.com/PostHog/posthog/pull/68741',
         reason: 'Turns ambiguous import breakage into actionable errors.',
-        whyItMatters:
-          'Clear ingestion failures shorten support and recovery loops when customers import data.',
+        whyItMatters: 'Clear ingestion failures shorten support and recovery loops when customers import data.',
         contributionType: 'Risk reduction',
         area: 'Batch import',
         kind: 'pull_request',
@@ -208,8 +197,7 @@ const candidateEngineers = [
         title: 'fix(batch-import-worker): stop infinite 1-byte crawl when part is consumed at EOF (#68356)',
         url: 'https://github.com/PostHog/posthog/pull/68356',
         reason: 'Removes a resource-exhaustion edge case in background processing.',
-        whyItMatters:
-          'A stuck worker can delay customer data availability and consume operational capacity.',
+        whyItMatters: 'A stuck worker can delay customer data availability and consume operational capacity.',
         contributionType: 'Risk reduction',
         area: 'Ingestion',
         kind: 'pull_request',
@@ -218,8 +206,7 @@ const candidateEngineers = [
         title: 'fix(batch-import-worker): stream decompression to bound staging disk (#67149)',
         url: 'https://github.com/PostHog/posthog/pull/67149',
         reason: 'Bounds disk usage during import processing.',
-        whyItMatters:
-          'Bounded resource use prevents one import path from creating wider operational instability.',
+        whyItMatters: 'Bounded resource use prevents one import path from creating wider operational instability.',
         contributionType: 'Technical leverage',
         area: 'Data warehouse',
         kind: 'pull_request',
@@ -251,8 +238,7 @@ const candidateEngineers = [
         title: 'feat(signals): add codex runtime support to the pipeline (#68750)',
         url: 'https://github.com/PostHog/posthog/pull/68750',
         reason: 'Expands the Signals pipeline to support an important runtime.',
-        whyItMatters:
-          'Runtime support increases product capability in an emerging PostHog automation area.',
+        whyItMatters: 'Runtime support increases product capability in an emerging PostHog automation area.',
         contributionType: 'Customer value',
         area: 'Signals',
         kind: 'pull_request',
@@ -261,8 +247,7 @@ const candidateEngineers = [
         title: 'feat(inbox): show actual spend in the usage section (#67365)',
         url: 'https://github.com/PostHog/posthog/pull/67365',
         reason: 'Improves customer visibility into spend.',
-        whyItMatters:
-          'Spend clarity affects trust and usage decisions for customers evaluating product value.',
+        whyItMatters: 'Spend clarity affects trust and usage decisions for customers evaluating product value.',
         contributionType: 'Customer value',
         area: 'Inbox',
         kind: 'pull_request',
@@ -271,8 +256,7 @@ const candidateEngineers = [
         title: 'fix(billing): show product name in usage limit approaching banner (#66314)',
         url: 'https://github.com/PostHog/posthog/pull/66314',
         reason: 'Clarifies billing-limit warnings.',
-        whyItMatters:
-          'Customers can act on usage-limit warnings only when the affected product is obvious.',
+        whyItMatters: 'Customers can act on usage-limit warnings only when the affected product is obvious.',
         contributionType: 'Risk reduction',
         area: 'Billing',
         kind: 'pull_request',

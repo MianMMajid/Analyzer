@@ -160,7 +160,9 @@ describe('buildImpactReportFromGitHub', () => {
       primaryImpactArea: 'CI and testing',
     })
     expect(report.engineers[0]?.explanation).toContain('Activity counts are kept as diagnostics')
-    expect(report.engineers[0]?.evidence.some((evidence) => evidence.contributionType === 'Post-merge adoption')).toBe(true)
+    expect(report.engineers[0]?.evidence.some((evidence) => evidence.contributionType === 'Post-merge adoption')).toBe(
+      true,
+    )
     expect(report.engineers.some((engineer) => engineer.githubLogin === 'grace')).toBe(true)
   })
 
@@ -221,29 +223,35 @@ describe('buildImpactReportFromGitHub', () => {
   })
 
   it('rejects invalid enrichment limits before doing unnecessary work', async () => {
-    await expect(buildImpactReportFromGitHub({
-      repository: 'PostHog/posthog',
-      analysisWindowDays: 90,
-      now: new Date('2026-07-06T00:00:00.000Z'),
-      service,
-      githubRequestConcurrency: 0,
-    })).rejects.toThrow('githubRequestConcurrency must be a positive integer.')
+    await expect(
+      buildImpactReportFromGitHub({
+        repository: 'PostHog/posthog',
+        analysisWindowDays: 90,
+        now: new Date('2026-07-06T00:00:00.000Z'),
+        service,
+        githubRequestConcurrency: 0,
+      }),
+    ).rejects.toThrow('githubRequestConcurrency must be a positive integer.')
 
-    await expect(buildImpactReportFromGitHub({
-      repository: 'PostHog/posthog',
-      analysisWindowDays: 90,
-      now: new Date('2026-07-06T00:00:00.000Z'),
-      service,
-      maxDiscussionPullRequests: -1,
-    })).rejects.toThrow('maxDiscussionPullRequests must be a non-negative integer.')
+    await expect(
+      buildImpactReportFromGitHub({
+        repository: 'PostHog/posthog',
+        analysisWindowDays: 90,
+        now: new Date('2026-07-06T00:00:00.000Z'),
+        service,
+        maxDiscussionPullRequests: -1,
+      }),
+    ).rejects.toThrow('maxDiscussionPullRequests must be a non-negative integer.')
 
-    await expect(buildImpactReportFromGitHub({
-      repository: 'PostHog/posthog',
-      analysisWindowDays: 90,
-      now: new Date('2026-07-06T00:00:00.000Z'),
-      service,
-      maxAdoptionPullRequests: 1.5,
-    })).rejects.toThrow('maxAdoptionPullRequests must be a non-negative integer.')
+    await expect(
+      buildImpactReportFromGitHub({
+        repository: 'PostHog/posthog',
+        analysisWindowDays: 90,
+        now: new Date('2026-07-06T00:00:00.000Z'),
+        service,
+        maxAdoptionPullRequests: 1.5,
+      }),
+    ).rejects.toThrow('maxAdoptionPullRequests must be a non-negative integer.')
   })
 })
 

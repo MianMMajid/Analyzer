@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { PgBoss } from 'pg-boss'
 import type { SendOptions } from 'pg-boss'
+import { databaseSslForMode, type DatabaseSslMode } from '../../db/client.js'
 import type {
   QueueClient,
   QueueDriver,
@@ -14,6 +15,7 @@ import type {
 export type QueueClientOptions = {
   driver?: QueueDriver
   databaseUrl?: string
+  databaseSslMode?: DatabaseSslMode
   logger?: Pick<Console, 'error' | 'warn'>
 }
 
@@ -32,7 +34,7 @@ export function createQueueClient(options: QueueClientOptions = {}): QueueClient
       throw new DurableQueueConnectionError()
     }
 
-    return new PgBossQueueClient(options.databaseUrl, options.logger ?? console)
+    return new PgBossQueueClient(options.databaseUrl, options.databaseSslMode ?? 'disable', options.logger ?? console)
   }
 
   return new InMemoryQueueClient()
@@ -93,10 +95,7 @@ export class InMemoryQueueClient implements QueueClient {
     this.#dedupeIndex.clear()
   }
 
-  async #drain<Name extends QueueJobName>(
-    name: Name,
-    handler: (job: QueuedJob<Name>) => Promise<void>,
-  ): Promise<void> {
+  async #drain<Name extends QueueJobName>(name: Name, handler: (job: QueuedJob<Name>) => Promise<void>): Promise<void> {
     const jobs = [...this.#jobs.values()]
       .filter((job): job is QueuedJob<Name> => job.name === name && job.status === 'queued')
       .filter((job) => job.runAt === undefined || job.runAt.getTime() <= Date.now())
@@ -122,22 +121,34 @@ export class PgBossQueueClient implements QueueClient {
   readonly #logger: Pick<Console, 'error' | 'warn'>
   #started: Promise<void> | undefined
 
-  constructor(databaseUrl: string, logger: Pick<Console, 'error' | 'warn'> = console) {
-    this.#boss = new PgBoss(databaseUrl)
+  constructor(
+    databaseUrl: string,
+    databaseSslMode: DatabaseSslMode = 'disable',
+    logger: Pick<Console, 'error' | 'warn'> = console,
+  ) {
+    const ssl = databaseSslForMode(databaseSslMode)
+    this.#boss = new PgBoss({
+      connectionString: databaseUrl,
+      ...(ssl === undefined ? {} : { ssl }),
+    })
     this.#logger = logger
     this.#boss.on('error', (error) => {
-      this.#logger.error(JSON.stringify({
-        event: 'queue_error',
-        driver: this.driver,
-        error: error instanceof Error ? error.message : String(error),
-      }))
+      this.#logger.error(
+        JSON.stringify({
+          event: 'queue_error',
+          driver: this.driver,
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      )
     })
     this.#boss.on('warning', (warning) => {
-      this.#logger.warn(JSON.stringify({
-        event: 'queue_warning',
-        driver: this.driver,
-        warning,
-      }))
+      this.#logger.warn(
+        JSON.stringify({
+          event: 'queue_warning',
+          driver: this.driver,
+          warning,
+        }),
+      )
     })
   }
 

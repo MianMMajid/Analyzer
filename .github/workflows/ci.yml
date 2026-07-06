@@ -10,6 +10,22 @@ on:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: posthog_impact_test
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+        options: >-
+          --health-cmd "pg_isready -U postgres -d posthog_impact_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    env:
+      DATABASE_INTEGRATION_TEST_URL: postgres://postgres:postgres@localhost:5432/posthog_impact_test
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -25,6 +41,3 @@ jobs:
 
       - name: Check
         run: npm run check
-
-      - name: Test
-        run: npm run test

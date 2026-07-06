@@ -50,7 +50,10 @@ export async function runMigrations(
 
     await withTransaction(pool, async (client) => {
       await client.query(sql)
-      await client.query('insert into schema_migrations (version, name) values ($1, $2)', [migration.version, migration.name])
+      await client.query('insert into schema_migrations (version, name) values ($1, $2)', [
+        migration.version,
+        migration.name,
+      ])
     })
     applied.push(migration.version)
   }

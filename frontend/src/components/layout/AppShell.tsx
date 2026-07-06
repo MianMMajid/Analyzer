@@ -1,12 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type CSSProperties,
-  type PropsWithChildren,
-} from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PropsWithChildren } from 'react'
 
 // The shell is shared UI: navigation and page chrome live here, feature logic does not.
 type AppShellProps = PropsWithChildren<{
@@ -33,7 +25,11 @@ export function AppShell({ children, eyebrow, summary, title }: AppShellProps) {
   const clickLockUntilRef = useRef(0)
   const scrollFrameRef = useRef<number | null>(null)
   const activeIndex = useMemo(
-    () => Math.max(0, navItems.findIndex((item) => item.id === activeSectionId)),
+    () =>
+      Math.max(
+        0,
+        navItems.findIndex((item) => item.id === activeSectionId),
+      ),
     [activeSectionId],
   )
 

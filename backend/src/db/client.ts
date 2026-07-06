@@ -1,6 +1,8 @@
 import { performance } from 'node:perf_hooks'
 import { Pool, type PoolConfig } from 'pg'
 
+export type DatabaseSslMode = 'disable' | 'require'
+
 export type DatabasePoolOptions = {
   databaseUrl: string
   applicationName?: string
@@ -8,6 +10,11 @@ export type DatabasePoolOptions = {
   connectionTimeoutMillis?: number
   idleTimeoutMillis?: number
   ssl?: PoolConfig['ssl']
+}
+
+export type DatabasePoolEnvironment = {
+  databaseUrl: string
+  databaseSslMode: DatabaseSslMode
 }
 
 export type DatabaseReadiness = {
@@ -26,6 +33,23 @@ export function createDatabasePool(options: DatabasePoolOptions): Pool {
 export function getSharedDatabasePool(options: DatabasePoolOptions): Pool {
   sharedPool ??= createDatabasePool(options)
   return sharedPool
+}
+
+export function buildDatabasePoolOptions(
+  environment: DatabasePoolEnvironment,
+  applicationName: string,
+): DatabasePoolOptions {
+  const ssl = databaseSslForMode(environment.databaseSslMode)
+  const options: DatabasePoolOptions = {
+    databaseUrl: environment.databaseUrl,
+    applicationName,
+  }
+
+  if (ssl !== undefined) {
+    options.ssl = ssl
+  }
+
+  return options
 }
 
 export async function closeSharedDatabasePool(): Promise<void> {
@@ -75,6 +99,14 @@ export function toPoolConfig(options: DatabasePoolOptions): PoolConfig {
   }
 
   return config
+}
+
+export function databaseSslForMode(mode: DatabaseSslMode): PoolConfig['ssl'] | undefined {
+  if (mode === 'require') {
+    return { rejectUnauthorized: false }
+  }
+
+  return undefined
 }
 
 function elapsedMs(startedAt: number): number {

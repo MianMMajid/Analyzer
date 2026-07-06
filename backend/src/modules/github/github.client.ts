@@ -211,8 +211,7 @@ export function createGitHubClient(options: GitHubClientOptions = {}): GitHubCli
         throw new Error(`GitHub pagination exceeded the configured ${maxPages} page limit.`)
       }
 
-      const currentQuery =
-        pathOrUrl === path ? { ...query, per_page: perPage, page } : undefined
+      const currentQuery = pathOrUrl === path ? { ...query, per_page: perPage, page } : undefined
       const requestUrl = buildUrl(baseUrl, pathOrUrl, currentQuery ?? {})
 
       if (visitedUrls.has(requestUrl)) {
@@ -334,11 +333,7 @@ function setNumberHeader(
   }
 }
 
-function setStringHeader(
-  metadata: GitHubRateLimitMetadata,
-  key: 'resource' | 'requestId',
-  value: string | null,
-): void {
+function setStringHeader(metadata: GitHubRateLimitMetadata, key: 'resource' | 'requestId', value: string | null): void {
   if (value !== null && value.length > 0) {
     metadata[key] = value
   }
@@ -411,10 +406,7 @@ function getRetryDelayMs(parameters: {
     return Math.min(60_000 * 2 ** parameters.attempt, parameters.maxRetryDelayMs)
   }
 
-  if (
-    parameters.status === 429 ||
-    retryableServerStatuses.has(parameters.status)
-  ) {
+  if (parameters.status === 429 || retryableServerStatuses.has(parameters.status)) {
     return Math.min(2 ** parameters.attempt * 500, parameters.maxRetryDelayMs)
   }
 

@@ -76,8 +76,7 @@ const since = process.env['EXPORT_SINCE'] ?? '2026-04-07T00:00:00Z'
 const until = process.env['EXPORT_UNTIL'] ?? '2026-07-06T23:59:59Z'
 const workspaceRoot = fileURLToPath(new URL('../../../', import.meta.url))
 const gitDir = process.env['POSTHOG_BRANCH_GIT_DIR'] ?? join(workspaceRoot, '.data/posthog-branches.git')
-const outputDirectory =
-  process.env['POSTHOG_EXPORT_DIR'] ?? join(workspaceRoot, '.data/posthog-90d')
+const outputDirectory = process.env['POSTHOG_EXPORT_DIR'] ?? join(workspaceRoot, '.data/posthog-90d')
 const branchesFile = join(outputDirectory, 'branches.ndjson')
 const activeBranchesFile = join(outputDirectory, 'active-branches.ndjson')
 const commitsFile = join(outputDirectory, 'commits.ndjson')
@@ -117,15 +116,7 @@ function ensureBranchRepository(): void {
 
 function fetchBranchRefs(): void {
   // Fetch every branch ref but no blobs. Branch/commit analysis does not need file contents.
-  runGit([
-    '--git-dir',
-    gitDir,
-    'fetch',
-    '--prune',
-    '--filter=blob:none',
-    'origin',
-    '+refs/heads/*:refs/heads/*',
-  ])
+  runGit(['--git-dir', gitDir, 'fetch', '--prune', '--filter=blob:none', 'origin', '+refs/heads/*:refs/heads/*'])
 }
 
 function countRemoteBranches(): number {
@@ -188,7 +179,10 @@ function exportBranches(): { branchCount: number; activeBranchCount: number } {
   }
 }
 
-function normalizeIdentity(name: string, email: string): {
+function normalizeIdentity(
+  name: string,
+  email: string,
+): {
   normalizedAuthorId: string
   authorIdentityConfidence: CommitRecord['authorIdentityConfidence']
 } {
@@ -449,9 +443,7 @@ async function exportCommits(
   }
 
   if (exportedCommitCount !== expectedCommitCount) {
-    throw new Error(
-      `Export count mismatch: expected ${expectedCommitCount}, exported ${exportedCommitCount}`,
-    )
+    throw new Error(`Export count mismatch: expected ${expectedCommitCount}, exported ${exportedCommitCount}`)
   }
 
   return {
@@ -474,15 +466,7 @@ const remoteBranchCountBefore = countRemoteBranches()
 fetchBranchRefs()
 
 const expectedCommitCount = Number(
-  runGit([
-    '--git-dir',
-    gitDir,
-    'rev-list',
-    '--count',
-    '--all',
-    `--since=${since}`,
-    `--until=${until}`,
-  ]),
+  runGit(['--git-dir', gitDir, 'rev-list', '--count', '--all', `--since=${since}`, `--until=${until}`]),
 )
 const mainlineCommitHashes = getCommitSet([
   '--git-dir',

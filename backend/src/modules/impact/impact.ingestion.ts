@@ -1,8 +1,5 @@
 import { normalizeContributorIdentity } from '../contributors/contributors.normalizer.js'
-import {
-  createGitHubCollectionService,
-  type GitHubCollectionService,
-} from '../github/github.service.js'
+import { createGitHubCollectionService, type GitHubCollectionService } from '../github/github.service.js'
 import type {
   GitHubCommit,
   GitHubPullRequest,
@@ -10,6 +7,24 @@ import type {
   GitHubPullRequestFile,
   GitHubPullRequestReview,
 } from '../github/github.types.js'
+import {
+  capScore,
+  createZeroBreakdown,
+  dimensionKeys,
+  recencyMultiplier,
+  type DimensionKey,
+} from './impact.dimensions.js'
+import {
+  buildFileFootprint,
+  classifyPullRequest,
+  countIntersection,
+  hasAny,
+  scorePullRequestEvidence,
+  scoreReviewQuality,
+  type PullRequestClassification,
+  type PullRequestFootprint,
+} from './impact.ingestion.classification.js'
+import { mapWithConcurrency } from './impact.ingestion.concurrency.js'
 import { calculateImpactScore } from './impact.scoring.js'
 import type { ImpactEngineer, ImpactEvidence, ImpactScoreBreakdown } from './impact.types.js'
 import type { ImpactReportRecord } from './impact.repository.js'
@@ -25,7 +40,6 @@ export type BuildImpactReportOptions = {
   readonly githubRequestConcurrency?: number
 }
 
-type DimensionKey = keyof ImpactScoreBreakdown
 type BreakdownDistributions = Record<DimensionKey, readonly number[]>
 
 type DimensionSignals = {
@@ -58,15 +72,6 @@ type WeightedEvidence = ImpactEvidence & {
   readonly occurredAt: string
 }
 
-type PullRequestClassification = {
-  readonly area: string
-  readonly contributionType: string
-  readonly reason: string
-  readonly whyItMatters: string
-  readonly dimensions: ImpactScoreBreakdown
-  readonly innovationReach: number
-}
-
 type ScoredPullRequest = {
   readonly pullRequest: GitHubPullRequest
   readonly evidenceScore: number
@@ -76,24 +81,12 @@ type MergedPullRequest = GitHubPullRequest & {
   readonly mergedAt: string
 }
 
-type PullRequestFootprint = {
-  readonly paths: ReadonlySet<string>
-  readonly areas: ReadonlySet<string>
-}
-
 type MergedPullRequestFootprint = {
   readonly pullRequest: MergedPullRequest
   readonly mergedAtMs: number
   readonly footprint: PullRequestFootprint
 }
 
-const dimensionKeys = [
-  'customerValue',
-  'technicalLeverage',
-  'riskReduction',
-  'ownership',
-  'collaboration',
-] as const satisfies readonly DimensionKey[]
 const diminishingEvidenceWeights = [1, 0.7, 0.45, 0.25, 0.15] as const
 const defaultGitHubRequestConcurrency = 4
 
@@ -144,14 +137,10 @@ export async function buildImpactReportFromGitHub(options: BuildImpactReportOpti
     'maxAdoptionPullRequests',
   )
   const fileMap = await fetchFilesForPullRequests(service, adoptionTargets, githubRequestConcurrency)
-  const discussions = await mapWithConcurrency(
-    discussionTargets,
-    githubRequestConcurrency,
-    async (pullRequest) => ({
-      pullRequest,
-      discussion: await service.fetchPullRequestDiscussion(pullRequest.number, { perPage: 100 }),
-    }),
-  )
+  const discussions = await mapWithConcurrency(discussionTargets, githubRequestConcurrency, async (pullRequest) => ({
+    pullRequest,
+    discussion: await service.fetchPullRequestDiscussion(pullRequest.number, { perPage: 100 }),
+  }))
 
   for (const { pullRequest, discussion } of discussions) {
     addDiscussionSignals(aggregates, pullRequest, discussion, { since, now })
@@ -167,7 +156,9 @@ export async function buildImpactReportFromGitHub(options: BuildImpactReportOpti
     }))
   const breakdownDistributions = buildBreakdownDistributions(aggregateBreakdowns.map(({ breakdown }) => breakdown))
   const rankedAggregates = aggregateBreakdowns
-    .map(({ aggregate, breakdown }) => toImpactEngineer(aggregate, normalizeBreakdown(breakdown, breakdownDistributions)))
+    .map(({ aggregate, breakdown }) =>
+      toImpactEngineer(aggregate, normalizeBreakdown(breakdown, breakdownDistributions)),
+    )
     .sort((left, right) => right.totalScore - left.totalScore)
     .slice(0, 5)
     .map((engineer, index) => ({
@@ -285,9 +276,7 @@ function selectTargetPullRequests(
   rawLimit: number | undefined,
   limitName: string,
 ): readonly GitHubPullRequest[] {
-  const limit = rawLimit === undefined
-    ? scoredPullRequests.length
-    : normalizeNonNegativeInteger(rawLimit, limitName)
+  const limit = rawLimit === undefined ? scoredPullRequests.length : normalizeNonNegativeInteger(rawLimit, limitName)
 
   if (limit === 0) {
     return []
@@ -297,42 +286,6 @@ function selectTargetPullRequests(
     .filter(({ pullRequest }) => predicate(pullRequest))
     .slice(0, limit)
     .map(({ pullRequest }) => pullRequest)
-}
-
-async function mapWithConcurrency<Input, Output>(
-  items: readonly Input[],
-  concurrency: number,
-  mapper: (item: Input, index: number) => Promise<Output>,
-): Promise<readonly Output[]> {
-  if (items.length === 0) {
-    return []
-  }
-
-  const results: Array<Output | undefined> = new Array(items.length)
-  const workerCount = Math.min(concurrency, items.length)
-  let nextIndex = 0
-
-  async function worker(): Promise<void> {
-    while (nextIndex < items.length) {
-      const index = nextIndex
-      nextIndex += 1
-      const item = items[index]
-
-      if (item !== undefined) {
-        results[index] = await mapper(item, index)
-      }
-    }
-  }
-
-  await Promise.all(Array.from({ length: workerCount }, worker))
-
-  return results.map((result, index) => {
-    if (result === undefined) {
-      throw new Error(`Concurrent mapper did not produce a result for index ${index}.`)
-    }
-
-    return result
-  })
 }
 
 async function fetchFilesForPullRequests(
@@ -386,7 +339,11 @@ function addPostMergeAdoptionSignals(
     for (const laterEntry of mergedPullRequests) {
       const { footprint: laterFootprint, pullRequest: later } = laterEntry
 
-      if (later.number === source.number || later.authorLogin === undefined || later.authorLogin === source.authorLogin) {
+      if (
+        later.number === source.number ||
+        later.authorLogin === undefined ||
+        later.authorLogin === source.authorLogin
+      ) {
         continue
       }
 
@@ -413,7 +370,10 @@ function addPostMergeAdoptionSignals(
       continue
     }
 
-    const adoptionStrength = Math.min(34, 14 + Math.min(adopters.size, 3) * 4 + Math.min(exactPathOverlap, 8) * 2 + Math.min(areaOverlap, 4))
+    const adoptionStrength = Math.min(
+      34,
+      14 + Math.min(adopters.size, 3) * 4 + Math.min(exactPathOverlap, 8) * 2 + Math.min(areaOverlap, 4),
+    )
     const dimensions = createZeroBreakdown()
     dimensions.ownership = adoptionStrength
     dimensions.technicalLeverage = Math.round(adoptionStrength * 0.72)
@@ -425,7 +385,8 @@ function addPostMergeAdoptionSignals(
       title: `Post-merge adoption after #${source.number}: ${source.title}`,
       url: source.htmlUrl,
       reason: `Later merged work by ${[...adopters].slice(0, 3).join(', ')} touched the same files or product area.`,
-      whyItMatters: 'Post-merge adoption indicates the change created a useful foundation that other engineers built on.',
+      whyItMatters:
+        'Post-merge adoption indicates the change created a useful foundation that other engineers built on.',
       contributionType: 'Post-merge adoption',
       area: primaryArea,
       kind: 'contribution_theme',
@@ -455,7 +416,8 @@ function addReviewSignal(
   const occurredAt = review.submittedAt ?? pullRequest.updatedAt
   const dimensions = createZeroBreakdown()
   dimensions.collaboration = reviewQuality
-  dimensions.technicalLeverage = review.state === 'CHANGES_REQUESTED' ? Math.round(reviewQuality * 0.65) : Math.round(reviewQuality * 0.35)
+  dimensions.technicalLeverage =
+    review.state === 'CHANGES_REQUESTED' ? Math.round(reviewQuality * 0.65) : Math.round(reviewQuality * 0.35)
   dimensions.riskReduction = review.state === 'CHANGES_REQUESTED' ? Math.round(reviewQuality * 0.45) : 0
 
   aggregate.diagnostics.reviews += 1
@@ -476,7 +438,11 @@ function addReviewSignal(
 
 function getAggregate(
   aggregates: Map<string, EngineerAggregate>,
-  identity: { readonly login?: string | undefined; readonly email?: string | undefined; readonly name?: string | undefined },
+  identity: {
+    readonly login?: string | undefined
+    readonly email?: string | undefined
+    readonly name?: string | undefined
+  },
 ): EngineerAggregate | undefined {
   const normalized = normalizeContributorIdentity({
     ...(identity.login === undefined ? {} : { login: identity.login }),
@@ -515,8 +481,11 @@ function getAggregate(
 }
 
 function toImpactEngineer(aggregate: EngineerAggregate, breakdown: ImpactScoreBreakdown): ImpactEngineer {
-  const evidence = selectTopItems(aggregate.evidence, 3, (candidate, selected) => candidate.weight > selected.weight)
-    .map(({ weight: _weight, occurredAt: _occurredAt, ...item }) => item)
+  const evidence = selectTopItems(
+    aggregate.evidence,
+    3,
+    (candidate, selected) => candidate.weight > selected.weight,
+  ).map(({ weight: _weight, occurredAt: _occurredAt, ...item }) => item)
   const primaryArea = [...aggregate.areas][0] ?? 'Repository-wide'
   const totalScore = calculateImpactScore(breakdown)
 
@@ -532,7 +501,12 @@ function toImpactEngineer(aggregate: EngineerAggregate, breakdown: ImpactScoreBr
     breakdown,
     explanation: explainRanking(aggregate, totalScore),
     riskQualityNote: buildRiskQualityNote(breakdown),
-    confidence: evidence.length >= 3 && strongestEvidenceWeight(aggregate) >= 24 ? 'high' : evidence.length >= 2 ? 'medium' : 'low',
+    confidence:
+      evidence.length >= 3 && strongestEvidenceWeight(aggregate) >= 24
+        ? 'high'
+        : evidence.length >= 2
+          ? 'medium'
+          : 'low',
     evidence,
   }
 }
@@ -613,8 +587,11 @@ function scoreDimension(values: readonly number[]): number {
     return 0
   }
 
-  const weightedEvidence = selectTopItems(values, diminishingEvidenceWeights.length, (candidate, selected) => candidate > selected)
-    .reduce((total, value, index) => total + value * (diminishingEvidenceWeights[index] ?? 0), 0)
+  const weightedEvidence = selectTopItems(
+    values,
+    diminishingEvidenceWeights.length,
+    (candidate, selected) => candidate > selected,
+  ).reduce((total, value, index) => total + value * (diminishingEvidenceWeights[index] ?? 0), 0)
 
   return capScore(20 + weightedEvidence)
 }
@@ -661,147 +638,6 @@ function selectTopItems<Item>(
   return selected
 }
 
-function classifyPullRequest(pullRequest: GitHubPullRequest): PullRequestClassification {
-  const text = `${pullRequest.title} ${pullRequest.body} ${pullRequest.labels.join(' ')}`.toLowerCase()
-  const area = inferArea(text)
-  const dimensions = createZeroBreakdown()
-  const areaReach = areaImportance(area)
-  const hasLinkedIssue = pullRequest.linkedIssueNumbers.length > 0
-
-  if (hasAny(text, ['fix', 'bug', 'revert', 'incident', 'reliability', 'security', 'perf', 'performance'])) {
-    dimensions.riskReduction = 22 + (hasLinkedIssue ? 5 : 0)
-    dimensions.customerValue = 8 + areaReach
-    dimensions.technicalLeverage = hasAny(text, ['test', 'ci', 'infra', 'tooling']) ? 10 : 4
-    dimensions.ownership = 8 + areaReach
-
-    return {
-      area,
-      contributionType: 'Risk reduction',
-      reason: 'Addresses a correctness, reliability, security, performance, or operational risk signal.',
-      whyItMatters: 'Risk-reducing changes protect customer trust and reduce future engineering drag.',
-      dimensions,
-      innovationReach: areaReach,
-    }
-  }
-
-  if (hasAny(text, ['test', 'ci', 'infra', 'refactor', 'migration', 'typing', 'types', 'tooling', 'architecture'])) {
-    dimensions.technicalLeverage = 24
-    dimensions.ownership = 12 + areaReach
-    dimensions.riskReduction = 7
-
-    return {
-      area,
-      contributionType: 'Technical leverage',
-      reason: 'Improves shared engineering systems, architecture, quality gates, or maintainability.',
-      whyItMatters: 'Leverage work compounds because it makes future product work safer or faster.',
-      dimensions,
-      innovationReach: areaReach,
-    }
-  }
-
-  dimensions.customerValue = 20 + areaReach + (hasLinkedIssue ? 4 : 0)
-  dimensions.ownership = 9 + areaReach
-  dimensions.technicalLeverage = hasAny(text, ['api', 'pipeline', 'framework', 'runtime']) ? 8 : 3
-
-  return {
-    area,
-    contributionType: hasAny(text, ['feat', 'feature', 'new']) ? 'Innovation and reach' : 'Customer value',
-    reason: 'Ships visible product, platform capability, or workflow value.',
-    whyItMatters: 'Customer-facing improvements are weighted by reach, linked problem context, and evidence quality.',
-    dimensions,
-    innovationReach: areaReach,
-  }
-}
-
-function inferArea(text: string): string {
-  if (hasAny(text, ['hogql', 'query', 'insight', 'chart', 'analytics'])) return 'Analytics'
-  if (hasAny(text, ['ci', 'test', 'pytest', 'flaky'])) return 'CI and testing'
-  if (hasAny(text, ['billing', 'usage', 'plan'])) return 'Billing'
-  if (hasAny(text, ['ingest', 'import', 'warehouse', 'batch'])) return 'Data ingestion'
-  if (hasAny(text, ['frontend', 'ui', 'dashboard', 'react'])) return 'Frontend'
-  if (hasAny(text, ['security', 'auth', 'permission'])) return 'Security'
-  if (hasAny(text, ['agent', 'signals', 'runtime'])) return 'Signals and automation'
-  return 'Repository-wide'
-}
-
-function inferAreaFromPath(path: string): string {
-  const normalizedPath = path.toLowerCase()
-
-  if (hasAny(normalizedPath, ['queries/', 'insights/', 'hogql', 'charts/', 'analytics'])) return 'Analytics'
-  if (hasAny(normalizedPath, ['.github/', 'ci/', 'pytest', 'tests/', '__tests__/', 'test/'])) return 'CI and testing'
-  if (hasAny(normalizedPath, ['billing', 'usage'])) return 'Billing'
-  if (hasAny(normalizedPath, ['warehouse', 'ingest', 'import', 'batch'])) return 'Data ingestion'
-  if (hasAny(normalizedPath, ['frontend/', 'src/scenes/', 'src/lib/', '.tsx', '.jsx'])) return 'Frontend'
-  if (hasAny(normalizedPath, ['auth', 'security', 'permission'])) return 'Security'
-  if (hasAny(normalizedPath, ['signals', 'agents'])) return 'Signals and automation'
-
-  return topLevelPath(path)
-}
-
-function buildFileFootprint(files: readonly GitHubPullRequestFile[]): PullRequestFootprint {
-  const paths = new Set<string>()
-  const areas = new Set<string>()
-
-  for (const file of files) {
-    paths.add(file.path)
-    areas.add(inferAreaFromPath(file.path))
-  }
-
-  return { paths, areas }
-}
-
-function countIntersection(left: ReadonlySet<string>, right: ReadonlySet<string>): number {
-  let count = 0
-  const smaller = left.size <= right.size ? left : right
-  const larger = left.size <= right.size ? right : left
-
-  for (const value of smaller) {
-    if (larger.has(value)) {
-      count += 1
-    }
-  }
-
-  return count
-}
-
-function topLevelPath(path: string): string {
-  const slashIndex = path.indexOf('/')
-
-  return slashIndex === -1 ? path || 'Repository-wide' : path.slice(0, slashIndex)
-}
-
-function scorePullRequestEvidence(
-  pullRequest: GitHubPullRequest,
-  window: { readonly since: Date; readonly now: Date },
-  classification: PullRequestClassification,
-): number {
-  const occurredAt = pullRequest.mergedAt ?? pullRequest.closedAt ?? pullRequest.updatedAt
-  const baseStrength = Math.max(...Object.values(classification.dimensions))
-  const issueLinkBonus = pullRequest.linkedIssueNumbers.length > 0 ? 4 : 0
-  const mergeConfidence = pullRequest.mergedAt === undefined ? 0 : 4
-
-  return Math.round((baseStrength + classification.innovationReach + issueLinkBonus + mergeConfidence) * recencyMultiplier(new Date(occurredAt), window))
-}
-
-function scoreReviewQuality(review: GitHubPullRequestReview): number {
-  const bodyLength = review.body.trim().length
-  const depthBonus = bodyLength >= 240 ? 8 : bodyLength >= 80 ? 5 : bodyLength >= 20 ? 2 : 0
-
-  if (review.state === 'CHANGES_REQUESTED') {
-    return 23 + depthBonus
-  }
-
-  if (review.state === 'APPROVED') {
-    return 12 + depthBonus
-  }
-
-  if (review.state === 'COMMENTED') {
-    return 10 + depthBonus
-  }
-
-  return 5
-}
-
 function summarizeContributionTheme(aggregate: EngineerAggregate, breakdown: ImpactScoreBreakdown): string {
   const strongestDimensions = (Object.entries(breakdown) as [DimensionKey, number][])
     .sort((left, right) => right[1] - left[1])
@@ -828,13 +664,6 @@ function buildRiskQualityNote(breakdown: ImpactScoreBreakdown): string {
   return 'Strongest quality signal: customer-facing delivery weighted by reach and linked problem context.'
 }
 
-function recencyMultiplier(date: Date, window: { readonly since: Date; readonly now: Date }): number {
-  const total = Math.max(1, window.now.getTime() - window.since.getTime())
-  const elapsed = Math.max(0, Math.min(total, date.getTime() - window.since.getTime()))
-
-  return 0.7 + (elapsed / total) * 0.3
-}
-
 function sizeGuardrailMultiplier(pullRequest: GitHubPullRequest): number {
   const changeSize = pullRequest.additions + pullRequest.deletions
 
@@ -847,23 +676,6 @@ function sizeGuardrailMultiplier(pullRequest: GitHubPullRequest): number {
   }
 
   return 1
-}
-
-function areaImportance(area: string): number {
-  switch (area) {
-    case 'Analytics':
-    case 'Data ingestion':
-    case 'Security':
-      return 6
-    case 'Billing':
-    case 'CI and testing':
-    case 'Signals and automation':
-      return 4
-    case 'Frontend':
-      return 3
-    default:
-      return 1
-  }
 }
 
 function strongestEvidenceWeight(aggregate: EngineerAggregate): number {
@@ -880,16 +692,6 @@ function createDimensionSignals(): DimensionSignals {
   }
 }
 
-function createZeroBreakdown(): ImpactScoreBreakdown {
-  return {
-    customerValue: 0,
-    technicalLeverage: 0,
-    riskReduction: 0,
-    ownership: 0,
-    collaboration: 0,
-  }
-}
-
 function dimensionLabel(dimension: DimensionKey): string {
   const labels = {
     customerValue: 'customer value',
@@ -903,11 +705,9 @@ function dimensionLabel(dimension: DimensionKey): string {
 }
 
 function toDisplayName(displayName: string, login: string): string {
-  return displayName === login ? login.replaceAll('-', ' ').replaceAll(/\b\w/gu, (letter) => letter.toUpperCase()) : displayName
-}
-
-function hasAny(text: string, needles: readonly string[]): boolean {
-  return needles.some((needle) => text.includes(needle))
+  return displayName === login
+    ? login.replaceAll('-', ' ').replaceAll(/\b\w/gu, (letter) => letter.toUpperCase())
+    : displayName
 }
 
 function normalizePositiveInteger(value: number, name: string): number {
@@ -924,8 +724,4 @@ function normalizeNonNegativeInteger(value: number, name: string): number {
   }
 
   return value
-}
-
-function capScore(score: number): number {
-  return Math.max(0, Math.min(100, Math.round(score)))
 }

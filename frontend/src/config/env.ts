@@ -10,8 +10,7 @@ const defaultAppName = 'PostHog Impact Dashboard'
 
 export const appEnvironment = {
   appName: import.meta.env['VITE_APP_NAME']?.trim() || defaultAppName,
-  apiBaseUrl:
-    import.meta.env['VITE_API_BASE_URL']?.trim() || 'http://localhost:4000',
+  apiBaseUrl: import.meta.env['VITE_API_BASE_URL']?.trim() || 'http://localhost:4000',
   mode: import.meta.env.MODE,
   isProduction: import.meta.env.PROD,
 } satisfies AppEnvironment
