@@ -266,7 +266,7 @@ dd {
 
 .dashboard-filters {
   display: grid;
-  grid-template-columns: minmax(150px, 0.8fr) minmax(150px, 0.8fr) minmax(360px, 2fr);
+  grid-template-columns: minmax(150px, 0.8fr) minmax(150px, 0.8fr) minmax(0, 2fr);
   gap: 10px;
   align-items: end;
   border-radius: var(--ww-radius);
@@ -276,6 +276,7 @@ dd {
 .dashboard-filters label {
   display: grid;
   gap: 5px;
+  min-width: 0;
 }
 
 .dashboard-filters span,
@@ -288,6 +289,8 @@ dd {
 
 .dashboard-filters select {
   width: 100%;
+  min-width: 0;
+  min-height: 44px;
   border: 1px solid var(--ww-border);
   border-radius: var(--ww-radius-tight);
   background: var(--ww-surface-strong);
@@ -298,12 +301,15 @@ dd {
 
 .dashboard-filters select:focus-visible {
   border-color: var(--ww-accent-orange);
+  outline: 2px solid var(--ww-accent-orange);
+  outline-offset: 2px;
 }
 
 .segmented-control {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 4px;
+  min-width: 0;
   border: 1px solid var(--ww-border);
   border-radius: var(--ww-radius-tight);
   background: rgba(255, 255, 255, 0.42);
@@ -311,22 +317,32 @@ dd {
 }
 
 .segmented-control button {
-  min-height: 38px;
+  min-width: 0;
+  min-height: 44px;
   border: 0;
   border-radius: 7px;
   background: transparent;
   color: var(--ww-text-muted);
   cursor: pointer;
+  overflow: hidden;
+  padding: 0 8px;
   font-size: 0.78rem;
   font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .segmented-control button:hover,
-.segmented-control button:focus-visible,
 .segmented-control button[data-selected='true'] {
   background: var(--ww-surface-strong);
   color: var(--ww-accent-orange);
-  outline: none;
+}
+
+.segmented-control button:focus-visible {
+  background: var(--ww-surface-strong);
+  color: var(--ww-accent-orange);
+  outline: 2px solid var(--ww-accent-orange);
+  outline-offset: 2px;
 }
 
 .charts-grid {
@@ -334,12 +350,14 @@ dd {
   grid-template-columns: minmax(320px, 0.44fr) minmax(0, 0.56fr);
   gap: 14px;
   align-items: stretch;
+  min-width: 0;
 }
 
 .chart-panel {
   display: grid;
   min-height: 250px;
   gap: 14px;
+  min-width: 0;
   border-radius: var(--ww-radius);
   padding: 14px;
 }
@@ -349,10 +367,12 @@ dd {
   justify-content: space-between;
   gap: 12px;
   align-items: center;
+  min-width: 0;
 }
 
 .chart-panel__header strong {
   overflow: hidden;
+  min-width: 0;
   color: var(--ww-text);
   font-size: 0.94rem;
   text-overflow: ellipsis;
@@ -361,10 +381,11 @@ dd {
 
 .bar-chart {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(44px, 1fr));
   min-height: 190px;
   gap: 8px;
   align-items: end;
+  min-width: 0;
 }
 
 .bar-chart__item {
@@ -422,9 +443,44 @@ dd {
 }
 
 .line-chart {
+  display: block;
   width: 100%;
   height: auto;
   min-height: 190px;
+}
+
+.empty-state {
+  display: flex;
+  min-height: 140px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-radius: var(--ww-radius);
+  padding: 18px;
+}
+
+.empty-state p {
+  color: var(--ww-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.empty-state button {
+  min-height: 44px;
+  flex: 0 0 auto;
+  border: 1px solid var(--ww-border);
+  border-radius: var(--ww-radius-tight);
+  background: var(--ww-surface-strong);
+  color: var(--ww-accent-orange);
+  cursor: pointer;
+  font-weight: 900;
+  padding: 0 14px;
+}
+
+.empty-state button:hover,
+.empty-state button:focus-visible {
+  border-color: var(--ww-accent-orange);
+  outline: 2px solid var(--ww-accent-orange);
+  outline-offset: 2px;
 }
 
 .line-chart__grid {
@@ -469,6 +525,7 @@ dd {
   gap: 12px;
   align-items: center;
   min-height: 70px;
+  min-width: 0;
   width: 100%;
   border-radius: var(--ww-radius);
   padding: 12px;
@@ -477,10 +534,14 @@ dd {
 }
 
 .leaderboard-row:hover,
-.leaderboard-row:focus-visible,
 .leaderboard-row[data-selected='true'] {
   border-color: var(--ww-accent-orange);
-  outline: none;
+}
+
+.leaderboard-row:focus-visible {
+  border-color: var(--ww-accent-orange);
+  outline: 2px solid var(--ww-accent-orange);
+  outline-offset: 2px;
 }
 
 .leaderboard-row[data-selected='true'] .leaderboard-row__rank {
@@ -529,23 +590,32 @@ dd {
   display: grid;
   gap: 14px;
   min-height: 390px;
+  min-width: 0;
   border-radius: var(--ww-radius);
   padding: 18px;
 }
 
 .detail-panel__header {
   display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
   justify-content: space-between;
   gap: 16px;
+}
+
+.detail-panel__header > div {
+  min-width: 0;
 }
 
 .detail-panel__header h2 {
   color: var(--ww-text);
   font-size: 1.35rem;
+  overflow-wrap: anywhere;
 }
 
 .detail-panel__summary {
   max-width: 78ch;
+  overflow-wrap: anywhere;
 }
 
 .impact-context {
@@ -570,6 +640,7 @@ dd {
 
 .impact-context p {
   font-size: 0.84rem;
+  overflow-wrap: anywhere;
 }
 
 .breakdown-list {
@@ -584,6 +655,11 @@ dd {
   align-items: center;
   color: var(--ww-text);
   font-size: 0.86rem;
+}
+
+.breakdown-row span {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .breakdown-row meter {
@@ -625,6 +701,7 @@ dd {
 .evidence-list a {
   display: grid;
   gap: 3px;
+  min-width: 0;
   border-top: 1px solid var(--ww-border);
   padding-top: 8px;
   text-decoration: none;
@@ -638,6 +715,14 @@ dd {
 .evidence-list a:focus-visible {
   outline: 2px solid var(--ww-accent-orange);
   outline-offset: 3px;
+}
+
+.evidence-list p,
+.guardrail-list li,
+.methodology-summary,
+.status-card h2,
+.status-card p {
+  overflow-wrap: anywhere;
 }
 
 .why-grid {
