@@ -1,10 +1,9 @@
-# Railway service settings are configured per service with root directories:
-# frontend/ -> npm run build, npm run preview
-# backend/  -> npm run build, npm run start
+# Shared Railway defaults. Service-specific build/start commands are set as
+# Railway variables so backend, frontend, and refresh can deploy from one
+# monorepo root without breaking workspace package imports.
 
 [build]
 builder = "NIXPACKS"
 
 [deploy]
 restartPolicyType = "ON_FAILURE"
-healthcheckPath = "/health"

@@ -49,6 +49,15 @@ const seedImpactReport = {
   source: 'mock_seed',
 } satisfies ImpactReportRecord
 
+export class NoImpactReportError extends Error {
+  readonly statusCode = 503
+
+  constructor(repository: string, analysisWindowDays: number) {
+    super(`No completed impact report exists for ${repository} over ${analysisWindowDays} days. Run the refresh job before serving production traffic.`)
+    this.name = 'NoImpactReportError'
+  }
+}
+
 export async function getLatestImpactReport(
   environment: BackendEnvironment = backendEnvironment,
 ): Promise<ImpactReportRecord> {
@@ -62,7 +71,15 @@ export async function getLatestImpactReport(
   })
   const report = await getLatestPersistedImpactReport(pool, environment.githubRepository, environment.analysisWindowDays)
 
-  return report ?? seedImpactReport
+  if (report !== null) {
+    return report
+  }
+
+  if (!environment.isProduction) {
+    return seedImpactReport
+  }
+
+  throw new NoImpactReportError(environment.githubRepository, environment.analysisWindowDays)
 }
 
 export async function getLatestPersistedImpactReport(

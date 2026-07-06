@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { seedAnalysisWindow, seedImpactEngineers, seedReportGeneratedAt } from './impact.data.js'
 import {
   getLatestPersistedImpactReport,
+  NoImpactReportError,
   saveImpactReport,
   type ImpactReportRecord,
 } from './impact.repository.js'
@@ -23,6 +24,13 @@ describe('impact repository persistence', () => {
 
     await expect(getLatestPersistedImpactReport({ query }, 'PostHog/posthog', 90)).resolves.toEqual(report)
     expect(query).toHaveBeenCalledWith(expect.stringContaining('from impact_reports'), ['PostHog/posthog', 90])
+  })
+
+  it('uses an explicit error when production has no completed DB report', () => {
+    expect(new NoImpactReportError('PostHog/posthog', 90)).toMatchObject({
+      statusCode: 503,
+      message: expect.stringContaining('Run the refresh job'),
+    })
   })
 
   it('persists report, engineer, and evidence rows in one transaction', async () => {

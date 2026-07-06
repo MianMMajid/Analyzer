@@ -43,7 +43,7 @@ Implemented:
 - Contributor identity normalization for aliases, noreply emails, co-authors, bots, diacritics, and ambiguous identities.
 - Migration runner for applying SQL migrations through `npm run migrate -w backend`.
 - Refresh job that collects GitHub signals, builds a scored report, and persists it to PostgreSQL.
-- API repository that reads the latest completed PostgreSQL report when `DATABASE_URL` is configured, with local seed fallback for development.
+- API repository that reads the latest completed PostgreSQL report when `DATABASE_URL` is configured, with local seed fallback for development only.
 - Scoring now uses capped evidence strength, issue linkage, review-quality weighting, recency decay, size guardrails, and team-relative normalization rather than raw PR/commit/review counts.
 - Post-merge adoption scoring compares later merged PRs against files and areas touched by earlier merged work.
 
@@ -51,6 +51,8 @@ Not yet production-complete:
 
 - Durable `pg-boss` queue execution is not enabled yet.
 - Railway services still need to be created and configured with production env vars and a scheduled refresh command.
+
+Deployment instructions are in [RAILWAY_DEPLOYMENT.md](./RAILWAY_DEPLOYMENT.md).
 
 The full implementation blueprint is in [FINAL_ARCHITECTURE_PLAN.md](./FINAL_ARCHITECTURE_PLAN.md). [ARCHITECTURE.md](./ARCHITECTURE.md) intentionally stays short and points to that source of truth.
 
@@ -172,6 +174,8 @@ cp frontend/.env.example frontend/.env
 
 For local development, the backend can run without `GITHUB_TOKEN` and `DATABASE_URL`. In production, both are required and the backend will fail fast if they are missing.
 
+Production does not serve mock impact data. If `DATABASE_URL` is configured and no completed GitHub-ingested report exists, the API returns `503` with `code: "NO_IMPACT_REPORT"` until `npm run refresh -w backend` succeeds.
+
 Start the backend:
 
 ```bash
@@ -229,6 +233,13 @@ Root scripts:
 | `npm run typecheck` | Build shared contract and type-check all workspaces. |
 | `npm run lint` | Run oxlint across packages, frontend, and backend. |
 | `npm run build` | Build shared contract, backend, and frontend. |
+| `npm run build:backend` | Build only the shared contract and backend for Railway. |
+| `npm run build:frontend` | Build only the shared contract and frontend for Railway. |
+| `npm run build:refresh` | Build backend artifacts for the refresh worker. |
+| `npm run start:backend` | Start the compiled backend API. |
+| `npm run start:frontend` | Start the frontend preview server on Railway's `$PORT`. |
+| `npm run start:refresh` | Run the compiled GitHub refresh worker once. |
+| `npm run start:migrate` | Run compiled SQL migrations once. |
 | `npm run test` | Run all Vitest suites. |
 | `npm run check` | Run typecheck, lint, and build. |
 
