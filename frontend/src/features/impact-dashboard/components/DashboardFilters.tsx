@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import {
   impactScoreDimensions,
   type DimensionFilter,
@@ -23,8 +24,8 @@ export function DashboardFilters({
   onConfidenceFilterChange,
   onDimensionFilterChange,
 }: DashboardFiltersProps) {
-  const areas = [...new Set(engineers.flatMap((engineer) => engineer.areas))].sort()
-  const confidences = [...new Set(engineers.map((engineer) => engineer.confidence))].sort()
+  const areas = useMemo(() => [...new Set(engineers.flatMap((engineer) => engineer.areas))].sort(), [engineers])
+  const confidences = useMemo(() => [...new Set(engineers.map((engineer) => engineer.confidence))].sort(), [engineers])
 
   return (
     <div className="dashboard-filters glass-panel" aria-label="Dashboard filters">
