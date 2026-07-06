@@ -830,7 +830,8 @@ Backend rules:
 - Environment variables must be parsed in `config/env.ts`.
 - GitHub tokens must never be sent to the frontend.
 - The refresh job must be repeatable and safe to rerun.
-- With `REFRESH_INTERVAL_MS=60000`, the refresh worker must run immediately and then every minute, while skipping ticks when the prior refresh is still running.
+- With `REFRESH_INTERVAL_MS=60000`, the refresh service must enqueue immediately and then every minute through `pg-boss`.
+- Refresh jobs must use singleton dedupe, bounded retries, exponential backoff, and `impact.refresh.dlq` dead-letter storage so a failed GitHub collection never blocks the API from serving the latest completed report.
 
 ## Database Recommendation
 
@@ -1604,13 +1605,20 @@ GITHUB_TOKEN=
 GITHUB_REPOSITORY=PostHog/posthog
 ANALYSIS_WINDOW_DAYS=90
 API_AVERAGE_LATENCY_TARGET_MS=150
+REFRESH_INTERVAL_MS=60000
+QUEUE_DRIVER=pg-boss
+REFRESH_RETRY_LIMIT=6
+REFRESH_RETRY_DELAY_SECONDS=60
+REFRESH_RETRY_DELAY_MAX_SECONDS=900
+REFRESH_JOB_EXPIRE_SECONDS=3600
 ```
 
 Queue, if enabled:
 
 ```text
 QUEUE_DRIVER=pg-boss
-REDIS_URL=
+Dead letter queue: impact.refresh.dlq
+Retry policy: 6 attempts, 60s initial delay, exponential backoff, 900s max delay
 ```
 
 ## Engineering Standards

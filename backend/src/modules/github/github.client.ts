@@ -407,10 +407,13 @@ function getRetryDelayMs(parameters: {
     )
   }
 
+  if (isSecondaryRateLimit(parameters.status, parameters.message)) {
+    return Math.min(60_000 * 2 ** parameters.attempt, parameters.maxRetryDelayMs)
+  }
+
   if (
     parameters.status === 429 ||
-    retryableServerStatuses.has(parameters.status) ||
-    isSecondaryRateLimit(parameters.status, parameters.message)
+    retryableServerStatuses.has(parameters.status)
   ) {
     return Math.min(2 ** parameters.attempt * 500, parameters.maxRetryDelayMs)
   }

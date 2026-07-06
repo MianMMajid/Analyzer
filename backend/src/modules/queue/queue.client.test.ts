@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createQueueClient, DurableQueueNotConfiguredError } from './queue.client.js'
+import { createQueueClient, DurableQueueConnectionError } from './queue.client.js'
 
 const refreshPayload = {
   repository: 'PostHog/posthog',
@@ -34,7 +34,20 @@ describe('queue client', () => {
     await expect(queue.listQueuedJobs()).resolves.toHaveLength(1)
   })
 
-  it('fails explicitly when the durable driver is requested before pg-boss is installed', () => {
-    expect(() => createQueueClient({ driver: 'pg-boss' })).toThrow(DurableQueueNotConfiguredError)
+  it('runs queued jobs with the in-memory worker', async () => {
+    const queue = createQueueClient()
+    await queue.enqueue('impact.refresh', refreshPayload)
+
+    const processed: string[] = []
+    await queue.work('impact.refresh', async (job) => {
+      processed.push(job.id)
+    })
+
+    expect(processed).toHaveLength(1)
+    await expect(queue.listQueuedJobs()).resolves.toMatchObject([{ status: 'completed' }])
+  })
+
+  it('fails explicitly when the durable driver has no database URL', () => {
+    expect(() => createQueueClient({ driver: 'pg-boss' })).toThrow(DurableQueueConnectionError)
   })
 })

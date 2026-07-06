@@ -61,6 +61,31 @@ describe('GitHub client', () => {
     expect(sleep).toHaveBeenCalledWith(2_000)
   })
 
+  it('waits at least one minute before retrying secondary rate limits without retry-after', async () => {
+    const sleep = vi.fn<() => Promise<void>>().mockResolvedValue(undefined)
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        jsonResponse(
+          { message: 'You have exceeded a secondary rate limit.' },
+          { status: 403, 'x-ratelimit-remaining': '4999' },
+        ),
+      )
+      .mockResolvedValueOnce(jsonResponse([{ id: 1 }]))
+
+    const client = createGitHubClient({
+      baseUrl: 'https://api.github.test',
+      fetch: fetchMock,
+      sleep,
+    })
+
+    const result = await client.paginateJson<{ id: number }>('/repos/PostHog/posthog/branches')
+
+    expect(result.items).toEqual([{ id: 1 }])
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(sleep).toHaveBeenCalledWith(60_000)
+  })
+
   it('throws typed API errors after retry budget is exhausted', async () => {
     const fetchMock = vi
       .fn<typeof fetch>()
