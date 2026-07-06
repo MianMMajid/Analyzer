@@ -93,11 +93,11 @@ export async function buildImpactReportFromGitHub(options: BuildImpactReportOpti
   const discussionTargets = [...pullRequests.items]
     .filter((pullRequest) => pullRequest.authorLogin !== undefined)
     .sort((left, right) => scorePullRequestEvidence(right, { since, now }) - scorePullRequestEvidence(left, { since, now }))
-    .slice(0, options.maxDiscussionPullRequests ?? 20)
+    .slice(0, options.maxDiscussionPullRequests ?? pullRequests.items.length)
   const adoptionTargets = [...pullRequests.items]
     .filter((pullRequest) => pullRequest.authorLogin !== undefined && pullRequest.mergedAt !== undefined)
     .sort((left, right) => scorePullRequestEvidence(right, { since, now }) - scorePullRequestEvidence(left, { since, now }))
-    .slice(0, options.maxAdoptionPullRequests ?? 50)
+    .slice(0, options.maxAdoptionPullRequests ?? pullRequests.items.length)
   const fileMap = await fetchFilesForPullRequests(service, adoptionTargets)
 
   for (const pullRequest of discussionTargets) {
