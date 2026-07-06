@@ -61,6 +61,7 @@ Set frontend variables:
 railway variable set --service frontend \
   VITE_APP_NAME='PostHog Impact Dashboard' \
   VITE_API_BASE_URL='https://YOUR_BACKEND_DOMAIN' \
+  VITE_PREVIEW_ALLOWED_HOSTS='YOUR_FRONTEND_DOMAIN_HOSTNAME' \
   NIXPACKS_NODE_VERSION=24 \
   NIXPACKS_BUILD_CMD='npm run build:frontend' \
   NIXPACKS_START_CMD='npm run start:frontend'
