@@ -81,6 +81,23 @@ describe('GitHub client', () => {
     } satisfies Partial<GitHubApiError>)
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
+
+  it('wraps network failures with request context', async () => {
+    const networkError = new TypeError('fetch failed')
+    const fetchMock = vi.fn<typeof fetch>().mockRejectedValue(networkError)
+    const client = createGitHubClient({
+      baseUrl: 'https://api.github.test',
+      fetch: fetchMock,
+    })
+
+    await expect(client.getJson('/repos/PostHog/posthog/branches')).rejects.toMatchObject({
+      name: 'GitHubApiError',
+      status: 0,
+      requestUrl: 'https://api.github.test/repos/PostHog/posthog/branches',
+      message: 'GitHub network request failed for https://api.github.test/repos/PostHog/posthog/branches on attempt 1.',
+      cause: networkError,
+    } satisfies Partial<GitHubApiError>)
+  })
 })
 
 function jsonResponse(

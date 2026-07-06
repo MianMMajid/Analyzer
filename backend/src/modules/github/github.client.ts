@@ -43,14 +43,17 @@ export class GitHubApiError extends Error {
   readonly status: number
   readonly rateLimit?: GitHubRateLimitMetadata
   readonly documentationUrl?: string
+  readonly requestUrl?: string
 
   constructor(parameters: {
     message: string
     status: number
     rateLimit?: GitHubRateLimitMetadata
     documentationUrl?: string
+    requestUrl?: string
+    cause?: unknown
   }) {
-    super(parameters.message)
+    super(parameters.message, parameters.cause === undefined ? undefined : { cause: parameters.cause })
     this.name = 'GitHubApiError'
     this.status = parameters.status
 
@@ -60,6 +63,10 @@ export class GitHubApiError extends Error {
 
     if (parameters.documentationUrl !== undefined) {
       this.documentationUrl = parameters.documentationUrl
+    }
+
+    if (parameters.requestUrl !== undefined) {
+      this.requestUrl = parameters.requestUrl
     }
   }
 }
@@ -95,10 +102,22 @@ export function createGitHubClient(options: GitHubClientOptions = {}): GitHubCli
     const url = buildUrl(baseUrl, pathOrUrl, query)
 
     for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
-      const response = await fetchImplementation(url, {
-        method: 'GET',
-        headers: buildHeaders(options.token, apiVersion),
-      })
+      let response: Response
+
+      try {
+        response = await fetchImplementation(url, {
+          method: 'GET',
+          headers: buildHeaders(options.token, apiVersion),
+        })
+      } catch (error) {
+        throw new GitHubApiError({
+          message: `GitHub network request failed for ${redactUrl(url)} on attempt ${attempt + 1}.`,
+          status: 0,
+          requestUrl: redactUrl(url),
+          cause: error,
+        })
+      }
+
       const rateLimit = readRateLimitMetadata(response.headers)
       const data = await readJson(response)
 
@@ -152,9 +171,11 @@ export function createGitHubClient(options: GitHubClientOptions = {}): GitHubCli
         status: number
         rateLimit?: GitHubRateLimitMetadata
         documentationUrl?: string
+        requestUrl?: string
       } = {
         message: errorPayload.message ?? `GitHub request failed with status ${response.status}.`,
         status: response.status,
+        requestUrl: redactUrl(url),
       }
 
       if (rateLimit !== undefined) {
@@ -262,6 +283,18 @@ function buildUrl(baseUrl: string, pathOrUrl: string, query: GitHubRequestQuery)
   for (const [key, value] of Object.entries(query)) {
     if (value !== undefined) {
       url.searchParams.set(key, String(value))
+    }
+  }
+
+  return url.toString()
+}
+
+function redactUrl(value: string): string {
+  const url = new URL(value)
+
+  for (const key of ['access_token', 'client_secret', 'token']) {
+    if (url.searchParams.has(key)) {
+      url.searchParams.set(key, '[redacted]')
     }
   }
 
