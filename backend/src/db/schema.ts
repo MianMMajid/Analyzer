@@ -1,4 +1,5 @@
 export const databaseTables = {
+  schemaMigrations: 'schema_migrations',
   impactReports: 'impact_reports',
   engineers: 'engineers',
   evidence: 'evidence',

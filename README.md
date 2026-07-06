@@ -41,13 +41,14 @@ Implemented:
 - Queue abstraction with local in-memory behavior and explicit durable-driver guardrails.
 - GitHub collection module with pagination, rate-limit retry handling, normalized PR/commit/review types, and tests.
 - Contributor identity normalization for aliases, noreply emails, co-authors, bots, diacritics, and ambiguous identities.
+- Migration runner for applying SQL migrations through `npm run migrate -w backend`.
+- Refresh job that collects GitHub signals, builds a scored report, and persists it to PostgreSQL.
+- API repository that reads the latest completed PostgreSQL report when `DATABASE_URL` is configured, with local seed fallback for development.
 
 Not yet production-complete:
 
-- Impact repository still reads seed data rather than PostgreSQL.
-- GitHub collection is implemented but not wired into the refresh pipeline yet.
-- Queue abstraction exists, but durable `pg-boss` execution is not enabled yet.
-- Railway services still need to be created and configured with production env vars.
+- Durable `pg-boss` queue execution is not enabled yet.
+- Railway services still need to be created and configured with production env vars and a scheduled refresh command.
 
 The full implementation blueprint is in [FINAL_ARCHITECTURE_PLAN.md](./FINAL_ARCHITECTURE_PLAN.md). [ARCHITECTURE.md](./ARCHITECTURE.md) intentionally stays short and points to that source of truth.
 
@@ -233,7 +234,8 @@ Backend scripts:
 
 | Command | Purpose |
 | --- | --- |
-| `npm run refresh -w backend` | Refresh entrypoint, currently a placeholder for real ingestion. |
+| `npm run migrate -w backend` | Apply SQL migrations to `DATABASE_URL`. |
+| `npm run refresh -w backend` | Collect GitHub signals, score the report, and persist it to PostgreSQL. |
 | `npm run export:posthog-90d -w backend` | Export 90-day PostHog branch and commit data into `.data/`. |
 
 ## Quality Gates
@@ -253,10 +255,11 @@ Current test coverage includes:
 - Backend environment validation tests.
 - Backend scoring tests.
 - Backend route tests through Fastify injection.
-- Backend DB client/readiness tests.
+- Backend DB client/readiness/migration tests.
 - Backend queue client tests.
 - Backend GitHub client/service tests.
 - Backend contributor normalization/repository tests.
+- Backend GitHub-to-impact ingestion and DB persistence tests.
 - Frontend API response validation tests.
 
 Production standard from the architecture plan:
@@ -318,13 +321,15 @@ Recommended Railway services:
 - `backend`: Fastify API service.
 - `frontend`: static Vite frontend service.
 - `postgres`: Railway PostgreSQL service.
-- scheduled refresh job: every 6 to 12 hours after ingestion is implemented.
+- scheduled refresh job: every 6 to 12 hours.
 
 Backend production checks:
 
 - `GITHUB_TOKEN` must be set.
 - `DATABASE_URL` must be set.
 - `WEB_ORIGIN` must match the deployed frontend origin.
+- Run `npm run migrate -w backend` before the first refresh.
+- Run `npm run refresh -w backend` once to seed the first persisted impact report.
 - `/health` must return ok.
 - `/ready` must confirm required dependencies are configured.
 
@@ -345,9 +350,8 @@ Frontend production checks:
 
 ## Next Production Milestones
 
-1. Wire impact repository reads to PostgreSQL.
-2. Wire refresh pipeline to GitHub collection, contributor normalization, and scoring.
-3. Enable durable queue execution with `pg-boss` or an equivalent Railway-compatible worker.
-4. Add database migration execution to deployment/startup workflow.
-5. Deploy backend, frontend, and PostgreSQL to Railway.
-6. Verify `GET /api/v1/impact/summary` averages under 150ms in production.
+1. Enable durable queue execution with `pg-boss` or an equivalent Railway-compatible worker.
+2. Add Railway scheduled refresh every 6 to 12 hours.
+3. Deploy backend, frontend, and PostgreSQL to Railway.
+4. Run migrations and first refresh against production env vars.
+5. Verify `GET /api/v1/impact/summary` averages under 150ms in production.
