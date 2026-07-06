@@ -3,6 +3,7 @@ import { getSharedDatabasePool } from '../db/client.js'
 import { runMigrations } from '../db/migrator.js'
 import { buildImpactReportFromGitHub } from '../modules/impact/impact.ingestion.js'
 import { saveImpactReport } from '../modules/impact/impact.repository.js'
+import { serializeError } from '../modules/observability/errorSerialization.js'
 
 export type RefreshImpactDataResult = {
   readonly reportId: number
@@ -62,7 +63,12 @@ async function runScheduledRefresh(environment: BackendEnvironment): Promise<voi
         `Impact refresh complete. reportId=${result.reportId} engineers=${result.engineerCount} generatedAt=${result.generatedAt}`,
       )
     } catch (error) {
-      console.error(error instanceof Error ? error.message : 'Unknown refresh error')
+      console.error(JSON.stringify({
+        event: 'impact_refresh_failed',
+        repository: environment.githubRepository,
+        analysisWindowDays: environment.analysisWindowDays,
+        error: serializeError(error),
+      }))
     } finally {
       isRefreshing = false
     }
