@@ -293,16 +293,12 @@ function normalizePullRequest(value: unknown): GitHubPullRequest {
     baseRefName: requireString(base, 'ref', 'pull_request.base.ref'),
     headRefName: requireString(head, 'ref', 'pull_request.head.ref'),
     labels: normalizeLabels(record['labels']),
-    additions: requireNumber(record, 'additions', 'pull_request.additions'),
-    deletions: requireNumber(record, 'deletions', 'pull_request.deletions'),
-    changedFiles: requireNumber(record, 'changed_files', 'pull_request.changed_files'),
-    commits: requireNumber(record, 'commits', 'pull_request.commits'),
-    reviewCommentCount: requireNumber(
-      record,
-      'review_comments',
-      'pull_request.review_comments',
-    ),
-    issueCommentCount: requireNumber(record, 'comments', 'pull_request.comments'),
+    additions: readNumber(record, 'additions') ?? 0,
+    deletions: readNumber(record, 'deletions') ?? 0,
+    changedFiles: readNumber(record, 'changed_files') ?? 0,
+    commits: readNumber(record, 'commits') ?? 0,
+    reviewCommentCount: readNumber(record, 'review_comments') ?? 0,
+    issueCommentCount: readNumber(record, 'comments') ?? 0,
     htmlUrl: requireString(record, 'html_url', 'pull_request.html_url'),
   }
 
@@ -458,13 +454,18 @@ function readString(record: UnknownRecord, key: string): string | undefined {
 }
 
 function requireNumber(record: UnknownRecord, key: string, field: string): number {
-  const value = record[key]
+  const value = readNumber(record, key)
 
-  if (typeof value !== 'number') {
+  if (value === undefined) {
     throw new Error(`Expected number for ${field}.`)
   }
 
   return value
+}
+
+function readNumber(record: UnknownRecord, key: string): number | undefined {
+  const value = record[key]
+  return typeof value === 'number' ? value : undefined
 }
 
 function requireBoolean(record: UnknownRecord, key: string, field: string): boolean {

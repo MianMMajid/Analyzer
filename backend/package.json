@@ -11,6 +11,8 @@
     "prebuild": "npm run build -w @repo/impact-contract",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
+    "postbuild": "mkdir -p dist/db/migrations && cp src/db/migrations/*.sql dist/db/migrations/",
+    "migrate": "tsx src/db/migrate.ts",
     "refresh": "tsx src/jobs/refreshImpactData.ts",
     "export:posthog-90d": "tsx src/jobs/exportPosthogBranchesAndCommits.ts",
     "pretest": "npm run build -w @repo/impact-contract",

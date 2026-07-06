@@ -9,8 +9,8 @@ function calculateReportAgeMinutes(generatedAt: string): number {
 }
 
 // The service shapes API-ready data and hides storage or ingestion details from routes.
-export function getImpactDashboard(): ImpactDashboardResponse {
-  const report = getLatestImpactReport()
+export async function getImpactDashboard(): Promise<ImpactDashboardResponse> {
+  const report = await getLatestImpactReport()
   const reportAgeMinutes = calculateReportAgeMinutes(report.generatedAt)
 
   return {
