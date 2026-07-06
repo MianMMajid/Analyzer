@@ -59,6 +59,7 @@ export type GitHubPullRequest = {
   id: number
   number: number
   title: string
+  body: string
   state: GitHubPullRequestState
   isDraft: boolean
   authorLogin?: string
@@ -76,6 +77,7 @@ export type GitHubPullRequest = {
   commits: number
   reviewCommentCount: number
   issueCommentCount: number
+  linkedIssueNumbers: readonly number[]
   htmlUrl: string
 }
 

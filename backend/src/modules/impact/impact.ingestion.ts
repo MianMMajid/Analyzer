@@ -22,26 +22,48 @@ export type BuildImpactReportOptions = {
   readonly maxDiscussionPullRequests?: number
 }
 
+type DimensionKey = keyof ImpactScoreBreakdown
+
+type DimensionSignals = {
+  readonly customerValue: number[]
+  readonly technicalLeverage: number[]
+  readonly riskReduction: number[]
+  readonly ownership: number[]
+  readonly collaboration: number[]
+}
+
+type EngineerDiagnostics = {
+  pullRequests: number
+  mergedPullRequests: number
+  commits: number
+  reviews: number
+}
+
 type EngineerAggregate = {
   readonly id: string
   readonly login: string
   displayName: string
-  pullRequests: number
-  mergedPullRequests: number
-  commits: number
-  reviewsGiven: number
-  reviewComments: number
-  issueComments: number
-  customerSignals: number
-  leverageSignals: number
-  riskSignals: number
+  diagnostics: EngineerDiagnostics
+  signals: DimensionSignals
   areas: Set<string>
   evidence: WeightedEvidence[]
 }
 
 type WeightedEvidence = ImpactEvidence & {
   readonly weight: number
+  readonly occurredAt: string
 }
+
+type PullRequestClassification = {
+  readonly area: string
+  readonly contributionType: string
+  readonly reason: string
+  readonly whyItMatters: string
+  readonly dimensions: ImpactScoreBreakdown
+  readonly innovationReach: number
+}
+
+const diminishingEvidenceWeights = [1, 0.7, 0.45, 0.25, 0.15] as const
 
 export async function buildImpactReportFromGitHub(options: BuildImpactReportOptions): Promise<ImpactReportRecord> {
   const now = options.now ?? new Date()
@@ -59,26 +81,30 @@ export async function buildImpactReportFromGitHub(options: BuildImpactReportOpti
   const aggregates = new Map<string, EngineerAggregate>()
 
   for (const pullRequest of pullRequests.items) {
-    addPullRequestSignal(aggregates, pullRequest)
+    addPullRequestSignal(aggregates, pullRequest, { since, now })
   }
 
   for (const commit of commits.items) {
-    addCommitSignal(aggregates, commit)
+    addCommitSignal(aggregates, commit, { since, now })
   }
 
   const discussionTargets = [...pullRequests.items]
     .filter((pullRequest) => pullRequest.authorLogin !== undefined)
-    .sort((left, right) => scorePullRequestEvidence(right) - scorePullRequestEvidence(left))
+    .sort((left, right) => scorePullRequestEvidence(right, { since, now }) - scorePullRequestEvidence(left, { since, now }))
     .slice(0, options.maxDiscussionPullRequests ?? 20)
 
   for (const pullRequest of discussionTargets) {
     const discussion = await service.fetchPullRequestDiscussion(pullRequest.number, { perPage: 100 })
-    addDiscussionSignals(aggregates, pullRequest, discussion)
+    addDiscussionSignals(aggregates, pullRequest, discussion, { since, now })
   }
 
-  const engineers = [...aggregates.values()]
-    .filter((aggregate) => aggregate.pullRequests > 0 || aggregate.commits > 0 || aggregate.reviewsGiven > 0)
-    .map(toImpactEngineer)
+  const rankedAggregates = [...aggregates.values()]
+    .filter((aggregate) => aggregate.evidence.length > 0)
+    .map((aggregate) => ({
+      aggregate,
+      breakdown: normalizeBreakdown(buildBaseBreakdown(aggregate), [...aggregates.values()].map(buildBaseBreakdown)),
+    }))
+    .map(({ aggregate, breakdown }) => toImpactEngineer(aggregate, breakdown))
     .sort((left, right) => right.totalScore - left.totalScore)
     .slice(0, 5)
     .map((engineer, index) => ({
@@ -95,12 +121,16 @@ export async function buildImpactReportFromGitHub(options: BuildImpactReportOpti
       startedAt: since.toISOString(),
       endedAt: now.toISOString(),
     },
-    engineers,
+    engineers: rankedAggregates,
     source: 'github_ingestion',
   }
 }
 
-function addPullRequestSignal(aggregates: Map<string, EngineerAggregate>, pullRequest: GitHubPullRequest): void {
+function addPullRequestSignal(
+  aggregates: Map<string, EngineerAggregate>,
+  pullRequest: GitHubPullRequest,
+  window: { readonly since: Date; readonly now: Date },
+): void {
   if (pullRequest.authorLogin === undefined) {
     return
   }
@@ -109,29 +139,39 @@ function addPullRequestSignal(aggregates: Map<string, EngineerAggregate>, pullRe
   if (aggregate === undefined) {
     return
   }
-  const classification = classifyPullRequest(pullRequest)
 
-  aggregate.pullRequests += 1
-  aggregate.mergedPullRequests += pullRequest.mergedAt === undefined ? 0 : 1
-  aggregate.reviewComments += pullRequest.reviewCommentCount
-  aggregate.issueComments += pullRequest.issueCommentCount
-  aggregate.customerSignals += classification.customer
-  aggregate.leverageSignals += classification.leverage
-  aggregate.riskSignals += classification.risk
+  const classification = classifyPullRequest(pullRequest)
+  const occurredAt = pullRequest.mergedAt ?? pullRequest.closedAt ?? pullRequest.updatedAt
+  const recency = recencyMultiplier(new Date(occurredAt), window)
+  const issueLinkBonus = pullRequest.linkedIssueNumbers.length > 0 ? 1.12 : 1
+  const sizeGuardrail = sizeGuardrailMultiplier(pullRequest)
+  const multiplier = recency * issueLinkBonus * sizeGuardrail
+
+  aggregate.diagnostics.pullRequests += 1
+  aggregate.diagnostics.mergedPullRequests += pullRequest.mergedAt === undefined ? 0 : 1
   aggregate.areas.add(classification.area)
+  addDimensionSignals(aggregate, classification.dimensions, multiplier)
   aggregate.evidence.push({
     title: `#${pullRequest.number}: ${pullRequest.title}`,
     url: pullRequest.htmlUrl,
-    reason: classification.reason,
+    reason:
+      pullRequest.linkedIssueNumbers.length === 0
+        ? classification.reason
+        : `${classification.reason} Linked issue(s): ${pullRequest.linkedIssueNumbers.map((issue) => `#${issue}`).join(', ')}.`,
     whyItMatters: classification.whyItMatters,
     contributionType: classification.contributionType,
     area: classification.area,
     kind: 'pull_request',
-    weight: scorePullRequestEvidence(pullRequest),
+    weight: scorePullRequestEvidence(pullRequest, window),
+    occurredAt,
   })
 }
 
-function addCommitSignal(aggregates: Map<string, EngineerAggregate>, commit: GitHubCommit): void {
+function addCommitSignal(
+  aggregates: Map<string, EngineerAggregate>,
+  commit: GitHubCommit,
+  window: { readonly since: Date; readonly now: Date },
+): void {
   const aggregate = getAggregate(aggregates, {
     login: commit.author.login,
     email: commit.author.email,
@@ -141,15 +181,24 @@ function addCommitSignal(aggregates: Map<string, EngineerAggregate>, commit: Git
     return
   }
 
-  aggregate.commits += 1
+  aggregate.diagnostics.commits += 1
   const message = commit.message.toLowerCase()
+  const dimensions = createZeroBreakdown()
 
-  if (message.includes('fix') || message.includes('revert')) {
-    aggregate.riskSignals += 1
+  if (hasAny(message, ['fix', 'revert', 'security', 'incident'])) {
+    dimensions.riskReduction = 10
   }
 
-  if (message.includes('test') || message.includes('ci') || message.includes('refactor')) {
-    aggregate.leverageSignals += 1
+  if (hasAny(message, ['test', 'ci', 'refactor', 'migration', 'types', 'tooling'])) {
+    dimensions.technicalLeverage = 8
+  }
+
+  if (hasAny(message, ['feat', 'feature'])) {
+    dimensions.customerValue = 8
+  }
+
+  if (Object.values(dimensions).some((value) => value > 0)) {
+    addDimensionSignals(aggregate, dimensions, recencyMultiplier(new Date(commit.authoredAt), window) * 0.55)
   }
 }
 
@@ -157,9 +206,10 @@ function addDiscussionSignals(
   aggregates: Map<string, EngineerAggregate>,
   pullRequest: GitHubPullRequest,
   discussion: GitHubPullRequestDiscussion,
+  window: { readonly since: Date; readonly now: Date },
 ): void {
   for (const review of discussion.reviews) {
-    addReviewSignal(aggregates, pullRequest, review)
+    addReviewSignal(aggregates, pullRequest, review, window)
   }
 }
 
@@ -167,6 +217,7 @@ function addReviewSignal(
   aggregates: Map<string, EngineerAggregate>,
   pullRequest: GitHubPullRequest,
   review: GitHubPullRequestReview,
+  window: { readonly since: Date; readonly now: Date },
 ): void {
   if (review.authorLogin === undefined || review.authorLogin === pullRequest.authorLogin) {
     return
@@ -177,17 +228,27 @@ function addReviewSignal(
     return
   }
 
-  aggregate.reviewsGiven += review.state === 'APPROVED' ? 2 : 1
-  aggregate.leverageSignals += review.state === 'CHANGES_REQUESTED' ? 1 : 0
+  const reviewQuality = scoreReviewQuality(review)
+  const pullRequestClassification = classifyPullRequest(pullRequest)
+  const occurredAt = review.submittedAt ?? pullRequest.updatedAt
+  const dimensions = createZeroBreakdown()
+  dimensions.collaboration = reviewQuality
+  dimensions.technicalLeverage = review.state === 'CHANGES_REQUESTED' ? Math.round(reviewQuality * 0.65) : Math.round(reviewQuality * 0.35)
+  dimensions.riskReduction = review.state === 'CHANGES_REQUESTED' ? Math.round(reviewQuality * 0.45) : 0
+
+  aggregate.diagnostics.reviews += 1
+  aggregate.areas.add(pullRequestClassification.area)
+  addDimensionSignals(aggregate, dimensions, recencyMultiplier(new Date(occurredAt), window))
   aggregate.evidence.push({
     title: `Reviewed #${pullRequest.number}: ${pullRequest.title}`,
     url: review.htmlUrl,
-    reason: `Provided ${review.state.toLowerCase().replaceAll('_', ' ')} review feedback.`,
-    whyItMatters: 'Meaningful review work reduces regressions and spreads context across the engineering team.',
+    reason: `Provided ${review.state.toLowerCase().replaceAll('_', ' ')} review feedback with quality-weighted scoring.`,
+    whyItMatters: 'Review impact is weighted by signal quality, not by raw review count.',
     contributionType: 'Collaboration',
-    area: classifyPullRequest(pullRequest).area,
+    area: pullRequestClassification.area,
     kind: 'review',
-    weight: review.state === 'CHANGES_REQUESTED' ? 7 : 5,
+    weight: reviewQuality,
+    occurredAt,
   })
 }
 
@@ -216,15 +277,13 @@ function getAggregate(
     id: login.replaceAll(/[^a-z0-9-]/gu, '-'),
     login,
     displayName: normalized.displayName,
-    pullRequests: 0,
-    mergedPullRequests: 0,
-    commits: 0,
-    reviewsGiven: 0,
-    reviewComments: 0,
-    issueComments: 0,
-    customerSignals: 0,
-    leverageSignals: 0,
-    riskSignals: 0,
+    diagnostics: {
+      pullRequests: 0,
+      mergedPullRequests: 0,
+      commits: 0,
+      reviews: 0,
+    },
+    signals: createDimensionSignals(),
     areas: new Set(),
     evidence: [],
   }
@@ -233,12 +292,11 @@ function getAggregate(
   return aggregate
 }
 
-function toImpactEngineer(aggregate: EngineerAggregate): ImpactEngineer {
-  const breakdown = buildBreakdown(aggregate)
+function toImpactEngineer(aggregate: EngineerAggregate, breakdown: ImpactScoreBreakdown): ImpactEngineer {
   const evidence = aggregate.evidence
     .sort((left, right) => right.weight - left.weight)
     .slice(0, 3)
-    .map(({ weight: _weight, ...item }) => item)
+    .map(({ weight: _weight, occurredAt: _occurredAt, ...item }) => item)
   const primaryArea = [...aggregate.areas][0] ?? 'Repository-wide'
   const totalScore = calculateImpactScore(breakdown)
 
@@ -249,69 +307,119 @@ function toImpactEngineer(aggregate: EngineerAggregate): ImpactEngineer {
     rank: 1,
     totalScore,
     primaryImpactArea: primaryArea,
-    primaryContributionTheme: summarizeContributionTheme(aggregate),
+    primaryContributionTheme: summarizeContributionTheme(aggregate, breakdown),
     areas: [...aggregate.areas].slice(0, 5),
     breakdown,
     explanation: explainRanking(aggregate, totalScore),
-    riskQualityNote: buildRiskQualityNote(aggregate),
-    confidence: evidence.length >= 3 && aggregate.mergedPullRequests >= 2 ? 'high' : evidence.length >= 2 ? 'medium' : 'low',
+    riskQualityNote: buildRiskQualityNote(breakdown),
+    confidence: evidence.length >= 3 && strongestEvidenceWeight(aggregate) >= 24 ? 'high' : evidence.length >= 2 ? 'medium' : 'low',
     evidence,
   }
 }
 
-function buildBreakdown(aggregate: EngineerAggregate): ImpactScoreBreakdown {
+function buildBaseBreakdown(aggregate: EngineerAggregate): ImpactScoreBreakdown {
   return {
-    customerValue: capScore(35 + aggregate.customerSignals * 8 + aggregate.mergedPullRequests * 4),
-    technicalLeverage: capScore(30 + aggregate.leverageSignals * 8 + aggregate.reviewsGiven * 3),
-    riskReduction: capScore(30 + aggregate.riskSignals * 9 + aggregate.reviewComments),
-    ownership: capScore(25 + aggregate.pullRequests * 5 + aggregate.areas.size * 8 + aggregate.commits),
-    collaboration: capScore(25 + aggregate.reviewsGiven * 8 + aggregate.issueComments + Math.min(aggregate.reviewComments, 20)),
+    customerValue: scoreDimension(aggregate.signals.customerValue),
+    technicalLeverage: scoreDimension(aggregate.signals.technicalLeverage),
+    riskReduction: scoreDimension(aggregate.signals.riskReduction),
+    ownership: scoreDimension(aggregate.signals.ownership),
+    collaboration: scoreDimension(aggregate.signals.collaboration),
   }
 }
 
-function classifyPullRequest(pullRequest: GitHubPullRequest): {
-  readonly area: string
-  readonly customer: number
-  readonly leverage: number
-  readonly risk: number
-  readonly contributionType: string
-  readonly reason: string
-  readonly whyItMatters: string
-} {
-  const text = `${pullRequest.title} ${pullRequest.labels.join(' ')}`.toLowerCase()
+function normalizeBreakdown(base: ImpactScoreBreakdown, allBreakdowns: readonly ImpactScoreBreakdown[]): ImpactScoreBreakdown {
+  return {
+    customerValue: normalizeDimension(base.customerValue, allBreakdowns.map((breakdown) => breakdown.customerValue)),
+    technicalLeverage: normalizeDimension(base.technicalLeverage, allBreakdowns.map((breakdown) => breakdown.technicalLeverage)),
+    riskReduction: normalizeDimension(base.riskReduction, allBreakdowns.map((breakdown) => breakdown.riskReduction)),
+    ownership: normalizeDimension(base.ownership, allBreakdowns.map((breakdown) => breakdown.ownership)),
+    collaboration: normalizeDimension(base.collaboration, allBreakdowns.map((breakdown) => breakdown.collaboration)),
+  }
+}
 
-  if (hasAny(text, ['fix', 'bug', 'revert', 'incident', 'reliability', 'security'])) {
+function normalizeDimension(value: number, values: readonly number[]): number {
+  if (value <= 0) {
+    return 0
+  }
+
+  const lowerOrEqualCount = values.filter((candidate) => candidate <= value).length
+  const percentile = values.length <= 1 ? 1 : (lowerOrEqualCount - 1) / (values.length - 1)
+
+  return capScore(value * 0.75 + (45 + percentile * 45) * 0.25)
+}
+
+function scoreDimension(values: readonly number[]): number {
+  if (values.length === 0) {
+    return 0
+  }
+
+  const weightedEvidence = [...values]
+    .sort((left, right) => right - left)
+    .slice(0, diminishingEvidenceWeights.length)
+    .reduce((total, value, index) => total + value * (diminishingEvidenceWeights[index] ?? 0), 0)
+
+  return capScore(20 + weightedEvidence)
+}
+
+function addDimensionSignals(aggregate: EngineerAggregate, dimensions: ImpactScoreBreakdown, multiplier: number): void {
+  for (const dimension of Object.keys(dimensions) as DimensionKey[]) {
+    const value = dimensions[dimension]
+
+    if (value > 0) {
+      aggregate.signals[dimension].push(Math.min(35, Math.round(value * multiplier)))
+    }
+  }
+}
+
+function classifyPullRequest(pullRequest: GitHubPullRequest): PullRequestClassification {
+  const text = `${pullRequest.title} ${pullRequest.body} ${pullRequest.labels.join(' ')}`.toLowerCase()
+  const area = inferArea(text)
+  const dimensions = createZeroBreakdown()
+  const areaReach = areaImportance(area)
+  const hasLinkedIssue = pullRequest.linkedIssueNumbers.length > 0
+
+  if (hasAny(text, ['fix', 'bug', 'revert', 'incident', 'reliability', 'security', 'perf', 'performance'])) {
+    dimensions.riskReduction = 22 + (hasLinkedIssue ? 5 : 0)
+    dimensions.customerValue = 8 + areaReach
+    dimensions.technicalLeverage = hasAny(text, ['test', 'ci', 'infra', 'tooling']) ? 10 : 4
+    dimensions.ownership = 8 + areaReach
+
     return {
-      area: inferArea(text),
-      customer: 1,
-      leverage: hasAny(text, ['test', 'ci', 'infra']) ? 1 : 0,
-      risk: 3,
+      area,
       contributionType: 'Risk reduction',
-      reason: 'Addresses a correctness, reliability, or operational risk signal.',
+      reason: 'Addresses a correctness, reliability, security, performance, or operational risk signal.',
       whyItMatters: 'Risk-reducing changes protect customer trust and reduce future engineering drag.',
+      dimensions,
+      innovationReach: areaReach,
     }
   }
 
-  if (hasAny(text, ['test', 'ci', 'infra', 'refactor', 'migration', 'typing', 'types', 'tooling'])) {
+  if (hasAny(text, ['test', 'ci', 'infra', 'refactor', 'migration', 'typing', 'types', 'tooling', 'architecture'])) {
+    dimensions.technicalLeverage = 24
+    dimensions.ownership = 12 + areaReach
+    dimensions.riskReduction = 7
+
     return {
-      area: inferArea(text),
-      customer: 0,
-      leverage: 3,
-      risk: 1,
+      area,
       contributionType: 'Technical leverage',
-      reason: 'Improves shared engineering systems, quality gates, or maintainability.',
+      reason: 'Improves shared engineering systems, architecture, quality gates, or maintainability.',
       whyItMatters: 'Leverage work compounds because it makes future product work safer or faster.',
+      dimensions,
+      innovationReach: areaReach,
     }
   }
+
+  dimensions.customerValue = 20 + areaReach + (hasLinkedIssue ? 4 : 0)
+  dimensions.ownership = 9 + areaReach
+  dimensions.technicalLeverage = hasAny(text, ['api', 'pipeline', 'framework', 'runtime']) ? 8 : 3
 
   return {
-    area: inferArea(text),
-    customer: hasAny(text, ['feat', 'feature', 'ui', 'dashboard', 'insight']) ? 3 : 2,
-    leverage: 1,
-    risk: 0,
-    contributionType: 'Customer value',
-    reason: 'Ships visible product or workflow value.',
-    whyItMatters: 'Customer-facing improvements are weighted when they land in meaningful product surfaces.',
+    area,
+    contributionType: hasAny(text, ['feat', 'feature', 'new']) ? 'Innovation and reach' : 'Customer value',
+    reason: 'Ships visible product, platform capability, or workflow value.',
+    whyItMatters: 'Customer-facing improvements are weighted by reach, linked problem context, and evidence quality.',
+    dimensions,
+    innovationReach: areaReach,
   }
 }
 
@@ -322,38 +430,140 @@ function inferArea(text: string): string {
   if (hasAny(text, ['ingest', 'import', 'warehouse', 'batch'])) return 'Data ingestion'
   if (hasAny(text, ['frontend', 'ui', 'dashboard', 'react'])) return 'Frontend'
   if (hasAny(text, ['security', 'auth', 'permission'])) return 'Security'
+  if (hasAny(text, ['agent', 'signals', 'runtime'])) return 'Signals and automation'
   return 'Repository-wide'
 }
 
-function scorePullRequestEvidence(pullRequest: GitHubPullRequest): number {
+function scorePullRequestEvidence(
+  pullRequest: GitHubPullRequest,
+  window: { readonly since: Date; readonly now: Date },
+): number {
   const classification = classifyPullRequest(pullRequest)
-  return (
-    classification.customer * 4 +
-    classification.leverage * 4 +
-    classification.risk * 4 +
-    (pullRequest.mergedAt === undefined ? 0 : 6) +
-    Math.min(pullRequest.reviewCommentCount + pullRequest.issueCommentCount, 10)
-  )
+  const occurredAt = pullRequest.mergedAt ?? pullRequest.closedAt ?? pullRequest.updatedAt
+  const baseStrength = Math.max(...Object.values(classification.dimensions))
+  const issueLinkBonus = pullRequest.linkedIssueNumbers.length > 0 ? 4 : 0
+  const mergeConfidence = pullRequest.mergedAt === undefined ? 0 : 4
+
+  return Math.round((baseStrength + classification.innovationReach + issueLinkBonus + mergeConfidence) * recencyMultiplier(new Date(occurredAt), window))
 }
 
-function summarizeContributionTheme(aggregate: EngineerAggregate): string {
-  return `Combined ${aggregate.mergedPullRequests} merged PRs, ${aggregate.commits} commits, and ${aggregate.reviewsGiven} review signals across ${aggregate.areas.size || 1} area(s).`
+function scoreReviewQuality(review: GitHubPullRequestReview): number {
+  const bodyLength = review.body.trim().length
+  const depthBonus = bodyLength >= 240 ? 8 : bodyLength >= 80 ? 5 : bodyLength >= 20 ? 2 : 0
+
+  if (review.state === 'CHANGES_REQUESTED') {
+    return 23 + depthBonus
+  }
+
+  if (review.state === 'APPROVED') {
+    return 12 + depthBonus
+  }
+
+  if (review.state === 'COMMENTED') {
+    return 10 + depthBonus
+  }
+
+  return 5
+}
+
+function summarizeContributionTheme(aggregate: EngineerAggregate, breakdown: ImpactScoreBreakdown): string {
+  const strongestDimensions = (Object.entries(breakdown) as [DimensionKey, number][])
+    .sort((left, right) => right[1] - left[1])
+    .slice(0, 2)
+    .map(([dimension]) => dimensionLabel(dimension))
+    .join(' and ')
+
+  return `Strongest evidence clusters around ${strongestDimensions || 'repository-wide impact'} across ${[...aggregate.areas].slice(0, 3).join(', ') || 'shared areas'}.`
 }
 
 function explainRanking(aggregate: EngineerAggregate, totalScore: number): string {
-  return `${toDisplayName(aggregate.displayName, aggregate.login)} scored ${totalScore} through a blend of shipped work, risk reduction, technical leverage, ownership breadth, and review participation.`
+  return `${toDisplayName(aggregate.displayName, aggregate.login)} scored ${totalScore} from classified evidence strength, recency, linked problem context, review quality, and team-relative normalization. Activity counts are kept as diagnostics, not as direct scoring inputs.`
 }
 
-function buildRiskQualityNote(aggregate: EngineerAggregate): string {
-  if (aggregate.riskSignals > aggregate.customerSignals && aggregate.riskSignals > aggregate.leverageSignals) {
-    return 'Strongest quality signal: concentrated fixes and reliability-oriented work in the analysis window.'
+function buildRiskQualityNote(breakdown: ImpactScoreBreakdown): string {
+  if (breakdown.riskReduction >= breakdown.technicalLeverage && breakdown.riskReduction >= breakdown.customerValue) {
+    return 'Strongest quality signal: risk-reducing work with evidence tied to reliability, security, fixes, or operational safety.'
   }
 
-  if (aggregate.leverageSignals >= aggregate.customerSignals) {
-    return 'Strongest quality signal: reusable technical leverage and review activity that improves future engineering throughput.'
+  if (breakdown.technicalLeverage >= breakdown.customerValue) {
+    return 'Strongest quality signal: leverage work that improves future engineering throughput or shared quality gates.'
   }
 
-  return 'Strongest quality signal: customer-facing work with supporting review and maintenance signals.'
+  return 'Strongest quality signal: customer-facing delivery weighted by reach and linked problem context.'
+}
+
+function recencyMultiplier(date: Date, window: { readonly since: Date; readonly now: Date }): number {
+  const total = Math.max(1, window.now.getTime() - window.since.getTime())
+  const elapsed = Math.max(0, Math.min(total, date.getTime() - window.since.getTime()))
+
+  return 0.7 + (elapsed / total) * 0.3
+}
+
+function sizeGuardrailMultiplier(pullRequest: GitHubPullRequest): number {
+  const changeSize = pullRequest.additions + pullRequest.deletions
+
+  if (pullRequest.changedFiles > 60 || changeSize > 8_000) {
+    return 0.75
+  }
+
+  if (pullRequest.changedFiles > 25 || changeSize > 2_000) {
+    return 0.9
+  }
+
+  return 1
+}
+
+function areaImportance(area: string): number {
+  switch (area) {
+    case 'Analytics':
+    case 'Data ingestion':
+    case 'Security':
+      return 6
+    case 'Billing':
+    case 'CI and testing':
+    case 'Signals and automation':
+      return 4
+    case 'Frontend':
+      return 3
+    default:
+      return 1
+  }
+}
+
+function strongestEvidenceWeight(aggregate: EngineerAggregate): number {
+  return aggregate.evidence.reduce((max, evidence) => Math.max(max, evidence.weight), 0)
+}
+
+function createDimensionSignals(): DimensionSignals {
+  return {
+    customerValue: [],
+    technicalLeverage: [],
+    riskReduction: [],
+    ownership: [],
+    collaboration: [],
+  }
+}
+
+function createZeroBreakdown(): ImpactScoreBreakdown {
+  return {
+    customerValue: 0,
+    technicalLeverage: 0,
+    riskReduction: 0,
+    ownership: 0,
+    collaboration: 0,
+  }
+}
+
+function dimensionLabel(dimension: DimensionKey): string {
+  const labels = {
+    customerValue: 'customer value',
+    technicalLeverage: 'technical leverage',
+    riskReduction: 'risk reduction',
+    ownership: 'ownership',
+    collaboration: 'collaboration',
+  } satisfies Record<DimensionKey, string>
+
+  return labels[dimension]
 }
 
 function toDisplayName(displayName: string, login: string): string {

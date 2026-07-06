@@ -56,6 +56,8 @@ describe('GitHub collection service', () => {
       number: 1,
       authorLogin: 'engineer',
       labels: ['feature'],
+      body: 'Fixes #99 and closes #101.',
+      linkedIssueNumbers: [99, 101],
       baseRefName: 'master',
       headRefName: 'impact-dashboard',
     })
@@ -138,6 +140,7 @@ function pullRequestFixture(number: number, updatedAt: string): unknown {
     id: number * 10,
     number,
     title: 'Improve impact analysis',
+    body: 'Fixes #99 and closes #101.',
     state: 'closed',
     draft: false,
     user: { login: 'engineer' },
