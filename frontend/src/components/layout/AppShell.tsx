@@ -22,14 +22,7 @@ export function AppShell({ children, eyebrow, summary, title }: AppShellProps) {
   )
 
   useEffect(() => {
-    const sections = navItems
-      .map((item) => document.getElementById(item.id))
-      .filter((section): section is HTMLElement => section !== null)
-
-    if (sections.length === 0) {
-      return
-    }
-
+    let observedSections: HTMLElement[] = []
     const observer = new IntersectionObserver(
       (entries) => {
         const visibleEntry = entries
@@ -45,13 +38,58 @@ export function AppShell({ children, eyebrow, summary, title }: AppShellProps) {
         threshold: [0.1, 0.35, 0.6],
       },
     )
+    const observeNavigationTargets = () => {
+      const sections = navItems
+        .map((item) => document.getElementById(item.id))
+        .filter((section): section is HTMLElement => section !== null)
 
-    for (const section of sections) {
-      observer.observe(section)
+      if (
+        sections.length === observedSections.length &&
+        sections.every((section, index) => section === observedSections[index])
+      ) {
+        return
+      }
+
+      for (const section of observedSections) {
+        observer.unobserve(section)
+      }
+
+      for (const section of sections) {
+        observer.observe(section)
+      }
+
+      observedSections = sections
+    }
+    const mutationObserver = new MutationObserver(observeNavigationTargets)
+    const main = document.querySelector('.app-main')
+
+    observeNavigationTargets()
+
+    if (main !== null) {
+      mutationObserver.observe(main, {
+        childList: true,
+        subtree: true,
+      })
     }
 
-    return () => observer.disconnect()
+    return () => {
+      mutationObserver.disconnect()
+      observer.disconnect()
+    }
   }, [])
+
+  function handleNavigationClick(sectionId: (typeof navItems)[number]['id']) {
+    const target = document.getElementById(sectionId)
+
+    setActiveSectionId(sectionId)
+
+    if (target === null) {
+      return
+    }
+
+    target.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    window.history.replaceState(null, '', `#${sectionId}`)
+  }
 
   const navStyle = {
     '--active-index': activeIndex,
@@ -60,7 +98,7 @@ export function AppShell({ children, eyebrow, summary, title }: AppShellProps) {
 
   return (
     <div className="app-shell">
-      <aside className="app-sidebar glass-panel" aria-label="Dashboard navigation" style={navStyle}>
+      <div className="app-dock glass-panel" role="navigation" aria-label="Dashboard navigation" style={navStyle}>
         <a className="brand-mark" href="#overview" aria-label="PostHog impact overview">
           PH
         </a>
@@ -71,13 +109,16 @@ export function AppShell({ children, eyebrow, summary, title }: AppShellProps) {
               data-active={activeSectionId === item.id}
               href={`#${item.id}`}
               key={item.id}
-              onClick={() => setActiveSectionId(item.id)}
+              onClick={(event) => {
+                event.preventDefault()
+                handleNavigationClick(item.id)
+              }}
             >
               {item.label}
             </a>
           ))}
         </nav>
-      </aside>
+      </div>
 
       <main className="app-main">
         <section className="hero-section" id="overview">

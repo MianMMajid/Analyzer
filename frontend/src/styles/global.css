@@ -83,6 +83,13 @@ svg {
   scroll-margin-top: 24px;
 }
 
+#overview,
+#leaderboard,
+#evidence,
+#methodology {
+  scroll-margin-top: 16px;
+}
+
 h1,
 h2,
 h3,
@@ -109,14 +116,14 @@ dd {
   min-height: 100svh;
 }
 
-.app-sidebar {
+.app-dock {
   position: fixed;
   right: auto;
   bottom: 14px;
   left: 50%;
   z-index: 20;
   display: flex;
-  width: min(650px, calc(100vw - 24px));
+  width: min(760px, calc(100vw - 24px));
   align-items: center;
   gap: 8px;
   border-radius: 999px;
@@ -206,7 +213,7 @@ dd {
   max-width: 1280px;
   min-width: 0;
   width: 100%;
-  padding: 24px clamp(18px, 3vw, 36px) 72px;
+  padding: 24px clamp(18px, 3vw, 36px) 96px;
 }
 
 .hero-section {
@@ -561,6 +568,8 @@ dd {
   grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.9fr) minmax(280px, 1fr);
   gap: 10px;
   align-items: stretch;
+  border-radius: var(--ww-radius);
+  padding: 12px;
 }
 
 .leadership-context > div,
@@ -953,9 +962,9 @@ dd {
 }
 
 @media (min-width: 901px) {
-  .app-sidebar {
+  .app-dock {
     bottom: 8px;
-    width: min(560px, calc(100vw - 24px));
+    width: min(720px, calc(100vw - 24px));
     padding: 5px;
   }
 
@@ -982,9 +991,9 @@ dd {
   }
 
   .app-main {
-    gap: 10px;
+    gap: 12px;
     padding-top: 12px;
-    padding-bottom: 8px;
+    padding-bottom: 64px;
   }
 
   .hero-section {
@@ -1042,7 +1051,7 @@ dd {
   }
 
   .chart-panel {
-    min-height: 160px;
+    min-height: 170px;
     gap: 8px;
     padding: 12px;
   }
@@ -1057,7 +1066,7 @@ dd {
   }
 
   .line-chart {
-    height: 130px;
+    height: 138px;
     min-height: 0;
   }
 
@@ -1092,8 +1101,8 @@ dd {
 
   .detail-panel {
     min-height: 0;
-    gap: 6px;
-    padding: 10px;
+    gap: 8px;
+    padding: 12px;
   }
 
   .detail-panel__header {
@@ -1183,6 +1192,11 @@ dd {
   .evidence-list p {
     display: none;
   }
+
+  .leadership-context {
+    gap: 8px;
+    padding: 10px;
+  }
 }
 
 @media (max-width: 1120px) {
@@ -1243,9 +1257,9 @@ dd {
     padding: 16px 12px 86px;
   }
 
-  .app-sidebar {
+  .app-dock {
     bottom: 10px;
-    width: min(520px, calc(100vw - 16px));
+    width: min(520px, calc(100vw - 12px));
     gap: 6px;
     padding: 6px;
   }
@@ -1328,14 +1342,13 @@ dd {
     padding-inline: 8px;
   }
 
-  .app-sidebar {
-    width: calc(100vw - 12px);
+  .app-dock {
+    width: calc(100vw - 8px);
+    gap: 4px;
   }
 
   .brand-mark {
-    width: 34px;
-    height: 34px;
-    font-size: 0.84rem;
+    display: none;
   }
 
   .app-nav {

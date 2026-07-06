@@ -173,7 +173,6 @@ export function ImpactDashboard() {
             title="Top 5 impactful engineers"
             description="Impact weighs customer value 30%, technical leverage 25%, risk reduction 20%, ownership 15%, and collaboration 10%; raw volume is only supporting context."
           >
-            <span className="nav-anchor" id="methodology" aria-hidden="true" />
             <DashboardFilters
               areaFilter={areaFilter}
               confidenceFilter={confidenceFilter}
@@ -216,6 +215,25 @@ export function ImpactDashboard() {
                     onSelectEngineer={setSelectedEngineerId}
                   />
                   <EngineerDetailPanel engineer={selectedEngineer} />
+                </div>
+
+                <div className="leadership-context glass-panel" id="methodology">
+                  <div>
+                    <span>Methodology</span>
+                    <p>{data.methodology.summary}</p>
+                  </div>
+                  <div>
+                    <span>Guardrails</span>
+                    <p>{data.methodology.guardrails.slice(0, 2).join(' ')}</p>
+                  </div>
+                  <ul aria-label="Impact dimension weights">
+                    {data.methodology.dimensions.map((dimension) => (
+                      <li key={dimension.name}>
+                        <strong>{dimension.weight}%</strong>
+                        <span>{dimension.name}</span>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               </>
             )}
