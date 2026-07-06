@@ -131,9 +131,18 @@ export function createGitHubCollectionService(
     const pullRequests: GitHubPullRequest[] = []
     const pages = []
     let page = 1
+    const maxPages = options.maxPages ?? 1_000
     let shouldContinue = true
 
-    while (shouldContinue && page <= (options.maxPages ?? 1_000)) {
+    if (!Number.isInteger(maxPages) || maxPages < 1) {
+      throw new Error('GitHub pull request pagination maxPages must be a positive integer.')
+    }
+
+    while (shouldContinue) {
+      if (page > maxPages) {
+        throw new Error(`GitHub pull request pagination exceeded the configured ${maxPages} page limit.`)
+      }
+
       const response = await client.getJson(repositoryPath('/pulls'), {
         state: 'all',
         sort: 'updated',

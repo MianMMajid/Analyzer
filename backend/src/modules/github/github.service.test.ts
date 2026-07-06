@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { GitHubClient } from './github.client.js'
 import { createGitHubCollectionService } from './github.service.js'
 
@@ -61,6 +61,45 @@ describe('GitHub collection service', () => {
       baseRefName: 'master',
       headRefName: 'impact-dashboard',
     })
+  })
+
+  it('throws when pull request pagination would exceed maxPages', async () => {
+    const getJson = vi.fn(async () => ({
+      data: [pullRequestFixture(1, '2026-05-01T00:00:00Z')],
+      nextUrl: 'https://api.github.test/repos/PostHog/posthog/pulls?page=2',
+    }))
+    const client = {
+      paginateJson: createMockClient([]).paginateJson,
+      getJson,
+    } satisfies GitHubClient
+    const service = createGitHubCollectionService({
+      repository: 'PostHog/posthog',
+      client,
+    })
+
+    await expect(service.fetchPullRequestsUpdatedSince({
+      since: new Date('2026-04-07T00:00:00Z'),
+      maxPages: 1,
+    })).rejects.toThrow('GitHub pull request pagination exceeded the configured 1 page limit.')
+    expect(getJson).toHaveBeenCalledTimes(1)
+  })
+
+  it('rejects invalid pull request maxPages values before fetching', async () => {
+    const getJson = vi.fn()
+    const client = {
+      paginateJson: createMockClient([]).paginateJson,
+      getJson,
+    } satisfies GitHubClient
+    const service = createGitHubCollectionService({
+      repository: 'PostHog/posthog',
+      client,
+    })
+
+    await expect(service.fetchPullRequestsUpdatedSince({
+      since: new Date('2026-04-07T00:00:00Z'),
+      maxPages: 0,
+    })).rejects.toThrow('GitHub pull request pagination maxPages must be a positive integer.')
+    expect(getJson).not.toHaveBeenCalled()
   })
 
   it('normalizes reviews, issue comments, and review comments for a PR', async () => {

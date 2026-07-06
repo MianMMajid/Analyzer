@@ -1,4 +1,12 @@
-import { useEffect, useMemo, useState, type CSSProperties, type PropsWithChildren } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type PropsWithChildren,
+} from 'react'
 
 // The shell is shared UI: navigation and page chrome live here, feature logic does not.
 type AppShellProps = PropsWithChildren<{
@@ -14,73 +22,103 @@ const navItems = [
   { id: 'methodology', label: 'Method' },
 ] as const
 
+type NavItemId = (typeof navItems)[number]['id']
+
+function isNavItemId(value: string): value is NavItemId {
+  return navItems.some((item) => item.id === value)
+}
+
 export function AppShell({ children, eyebrow, summary, title }: AppShellProps) {
-  const [activeSectionId, setActiveSectionId] = useState<(typeof navItems)[number]['id']>('overview')
+  const [activeSectionId, setActiveSectionId] = useState<NavItemId>('overview')
+  const clickLockUntilRef = useRef(0)
+  const scrollFrameRef = useRef<number | null>(null)
   const activeIndex = useMemo(
     () => Math.max(0, navItems.findIndex((item) => item.id === activeSectionId)),
     [activeSectionId],
   )
 
-  useEffect(() => {
-    let observedSections: HTMLElement[] = []
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const visibleEntry = entries
-          .filter((entry) => entry.isIntersecting)
-          .sort((left, right) => right.intersectionRatio - left.intersectionRatio)[0]
-
-        if (visibleEntry?.target.id !== undefined) {
-          setActiveSectionId(visibleEntry.target.id as (typeof navItems)[number]['id'])
-        }
-      },
-      {
-        rootMargin: '-20% 0px -58% 0px',
-        threshold: [0.1, 0.35, 0.6],
-      },
-    )
-    const observeNavigationTargets = () => {
-      const sections = navItems
-        .map((item) => document.getElementById(item.id))
-        .filter((section): section is HTMLElement => section !== null)
-
-      if (
-        sections.length === observedSections.length &&
-        sections.every((section, index) => section === observedSections[index])
-      ) {
-        return
-      }
-
-      for (const section of observedSections) {
-        observer.unobserve(section)
-      }
-
-      for (const section of sections) {
-        observer.observe(section)
-      }
-
-      observedSections = sections
+  const updateActiveSectionFromScroll = useCallback(() => {
+    if (Date.now() < clickLockUntilRef.current) {
+      return
     }
-    const mutationObserver = new MutationObserver(observeNavigationTargets)
-    const main = document.querySelector('.app-main')
 
-    observeNavigationTargets()
+    const hashId = window.location.hash.slice(1)
 
-    if (main !== null) {
-      mutationObserver.observe(main, {
-        childList: true,
-        subtree: true,
+    if (window.scrollY < 24 && !isNavItemId(hashId)) {
+      setActiveSectionId('overview')
+      return
+    }
+
+    if (document.documentElement.scrollHeight - window.innerHeight <= 160) {
+      setActiveSectionId(isNavItemId(hashId) ? hashId : 'overview')
+      return
+    }
+
+    const activationY = window.scrollY + Math.min(window.innerHeight * 0.36, 280)
+    let nextSectionId: NavItemId = 'overview'
+
+    for (const item of navItems) {
+      const element = document.getElementById(item.id)
+
+      if (element === null) {
+        continue
+      }
+
+      const elementTop = element.getBoundingClientRect().top + window.scrollY
+
+      if (elementTop <= activationY) {
+        nextSectionId = item.id
+      }
+    }
+
+    setActiveSectionId(nextSectionId)
+  }, [])
+
+  useEffect(() => {
+    function scheduleActiveSectionUpdate() {
+      if (scrollFrameRef.current !== null) {
+        window.cancelAnimationFrame(scrollFrameRef.current)
+      }
+
+      scrollFrameRef.current = window.requestAnimationFrame(() => {
+        scrollFrameRef.current = null
+        updateActiveSectionFromScroll()
       })
     }
 
-    return () => {
-      mutationObserver.disconnect()
-      observer.disconnect()
-    }
-  }, [])
+    function updateFromHash() {
+      const hashId = window.location.hash.slice(1)
 
-  function handleNavigationClick(sectionId: (typeof navItems)[number]['id']) {
+      if (isNavItemId(hashId)) {
+        setActiveSectionId(hashId)
+      }
+    }
+
+    const mutationObserver = new MutationObserver(scheduleActiveSectionUpdate)
+
+    scheduleActiveSectionUpdate()
+    updateFromHash()
+    mutationObserver.observe(document.body, { childList: true, subtree: true })
+    window.addEventListener('hashchange', updateFromHash)
+    window.addEventListener('resize', scheduleActiveSectionUpdate)
+    window.addEventListener('scroll', scheduleActiveSectionUpdate, { passive: true })
+
+    return () => {
+      if (scrollFrameRef.current !== null) {
+        window.cancelAnimationFrame(scrollFrameRef.current)
+      }
+
+      mutationObserver.disconnect()
+      window.removeEventListener('hashchange', updateFromHash)
+      window.removeEventListener('resize', scheduleActiveSectionUpdate)
+      window.removeEventListener('scroll', scheduleActiveSectionUpdate)
+    }
+  }, [updateActiveSectionFromScroll])
+
+  function handleNavigationClick(sectionId: NavItemId) {
     const target = document.getElementById(sectionId)
 
+    clickLockUntilRef.current = Date.now() + 900
     setActiveSectionId(sectionId)
 
     if (target === null) {
@@ -89,6 +127,7 @@ export function AppShell({ children, eyebrow, summary, title }: AppShellProps) {
 
     target.scrollIntoView({ behavior: 'smooth', block: 'start' })
     window.history.replaceState(null, '', `#${sectionId}`)
+    window.setTimeout(updateActiveSectionFromScroll, 950)
   }
 
   const navStyle = {
@@ -97,7 +136,7 @@ export function AppShell({ children, eyebrow, summary, title }: AppShellProps) {
   } as CSSProperties
 
   return (
-    <div className="app-shell">
+    <div className="app-shell" data-active-section={activeSectionId}>
       <div className="app-dock glass-panel" role="navigation" aria-label="Dashboard navigation" style={navStyle}>
         <a className="brand-mark" href="#overview" aria-label="PostHog impact overview">
           PH

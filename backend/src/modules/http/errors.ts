@@ -3,10 +3,17 @@ import { ApiErrorSchema } from '@repo/impact-contract'
 
 type HttpError = Error & {
   statusCode?: number
+  status?: number
 }
 
 function statusCodeFor(error: HttpError): number {
-  return error.statusCode ?? 500
+  const statusCode = error.statusCode ?? error.status ?? 500
+
+  if (!Number.isInteger(statusCode) || statusCode < 400 || statusCode > 599) {
+    return 500
+  }
+
+  return statusCode
 }
 
 function codeFor(statusCode: number): string {
