@@ -1,0 +1,10 @@
+# Railway service settings are configured per service with root directories:
+# frontend/ -> npm run build, npm run preview
+# backend/  -> npm run build, npm run start
+
+[build]
+builder = "NIXPACKS"
+
+[deploy]
+restartPolicyType = "ON_FAILURE"
+healthcheckPath = "/health"

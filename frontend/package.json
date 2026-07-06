@@ -1,0 +1,29 @@
+{
+  "name": "frontend",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "predev": "npm run build -w @repo/impact-contract",
+    "dev": "vite --host 0.0.0.0",
+    "pretypecheck": "npm run build -w @repo/impact-contract",
+    "typecheck": "tsc -b",
+    "prebuild": "npm run build -w @repo/impact-contract",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview --host 0.0.0.0",
+    "pretest": "npm run build -w @repo/impact-contract",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@repo/impact-contract": "0.0.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.2",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.3",
+    "vite": "^8.1.1"
+  }
+}
