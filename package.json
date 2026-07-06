@@ -1,0 +1,25 @@
+{
+  "name": "weaveai-task",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "workspaces": [
+    "frontend",
+    "backend",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:frontend": "npm run dev -w frontend",
+    "dev:backend": "npm run dev -w backend",
+    "build": "npm run build -w @repo/impact-contract && npm run build -w backend && npm run build -w frontend",
+    "typecheck": "npm run build -w @repo/impact-contract && npm run typecheck -w @repo/impact-contract && npm run typecheck -w backend && npm run typecheck -w frontend",
+    "lint": "oxlint packages frontend backend",
+    "test": "npm run build -w @repo/impact-contract && npm run test -w @repo/impact-contract && npm run test -w backend && npm run test -w frontend",
+    "check": "npm run typecheck && npm run lint && npm run build"
+  },
+  "devDependencies": {
+    "oxlint": "^1.71.0",
+    "typescript": "~6.0.2",
+    "vitest": "^4.0.15"
+  }
+}
