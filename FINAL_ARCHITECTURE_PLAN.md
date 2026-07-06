@@ -194,6 +194,9 @@ The dashboard must show:
 - Top five engineers
 - Impact score
 - Score breakdown
+- Area, confidence, and score-dimension filters
+- Clickable bar chart with engineer names below each bar
+- Line chart showing the selected engineer's impact profile across dimensions
 - Primary contribution theme
 - Representative evidence
 - Why this matters to PostHog
@@ -202,6 +205,7 @@ The dashboard must show:
 - Methodology summary
 
 The dashboard must fit on one laptop screen and avoid overwhelming the leader with raw GitHub activity.
+The frontend must poll the summary API every 60 seconds so the page reflects the latest completed report without a full refresh.
 
 ## Impact Definition
 
@@ -826,6 +830,7 @@ Backend rules:
 - Environment variables must be parsed in `config/env.ts`.
 - GitHub tokens must never be sent to the frontend.
 - The refresh job must be repeatable and safe to rerun.
+- With `REFRESH_INTERVAL_MS=60000`, the refresh worker must run immediately and then every minute, while skipping ticks when the prior refresh is still running.
 
 ## Database Recommendation
 
@@ -1540,7 +1545,7 @@ Use one Railway project with separate services:
 frontend service
 backend service
 postgres service
-optional refresh job service
+refresh worker service
 ```
 
 Frontend service:
@@ -1566,11 +1571,11 @@ Use Railway PostgreSQL.
 Expose DATABASE_URL only to the backend service.
 ```
 
-Optional refresh job:
+Refresh worker:
 
 ```text
-Run backend refresh job on a schedule.
-Recommended frequency: every 6 to 12 hours.
+Run backend refresh job continuously with REFRESH_INTERVAL_MS=60000.
+Skip overlapping refresh ticks if ingestion takes longer than one minute.
 ```
 
 Optional queue service:
@@ -2119,6 +2124,7 @@ Updates:
 - 2026-07-06 15:20 - Scoring Fidelity - Replaced direct PR/commit/review volume scoring with capped classified evidence strength, linked-issue extraction, review-quality weighting, recency decay, PR size guardrails, and team-relative dimension normalization - `backend/src/modules/impact/impact.ingestion.ts`, `backend/src/modules/github/github.service.ts`, `backend/src/modules/github/github.types.ts`, `README.md`.
 - 2026-07-06 15:25 - Adoption Scoring - Added PR file collection and post-merge adoption scoring that rewards earlier work when later merged PRs by other engineers touch the same files or product areas - `backend/src/modules/github/github.service.ts`, `backend/src/modules/github/github.types.ts`, `backend/src/modules/impact/impact.ingestion.ts`, `README.md`.
 - 2026-07-06 15:30 - Railway Production Readiness - Removed production mock fallback, added explicit `NO_IMPACT_REPORT` response before first refresh, added Railway monorepo build/start scripts, and documented backend/frontend/refresh/Postgres deployment flow - `backend/src/modules/impact/impact.repository.ts`, `backend/src/modules/impact/impact.routes.ts`, `package.json`, `railway.toml`, `RAILWAY_DEPLOYMENT.md`, `README.md`.
+- 2026-07-06 15:45 - Live Dashboard Feed - Added one-minute frontend polling, area/confidence/dimension filters, clickable engineer bar chart, selected-engineer dimension line chart, and refresh-worker interval support with overlap protection - `frontend/src/features/impact-dashboard`, `frontend/src/styles/global.css`, `backend/src/jobs/refreshImpactData.ts`, `backend/src/config/env.ts`, `backend/.env.example`.
 
 ## Definition of Done
 

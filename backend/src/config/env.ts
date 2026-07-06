@@ -8,6 +8,7 @@ const EnvironmentSchema = z
     GITHUB_REPOSITORY: z.string().min(1).default('PostHog/posthog'),
     ANALYSIS_WINDOW_DAYS: z.coerce.number().int().positive().default(90),
     API_AVERAGE_LATENCY_TARGET_MS: z.coerce.number().int().positive().default(150),
+    REFRESH_INTERVAL_MS: z.coerce.number().int().positive().optional(),
     GITHUB_TOKEN: z.string().min(1).optional(),
     DATABASE_URL: z.string().min(1).optional(),
   })
@@ -40,6 +41,7 @@ export type BackendEnvironment = {
   githubRepository: string
   analysisWindowDays: number
   apiAverageLatencyTargetMs: number
+  refreshIntervalMs?: number
   githubToken?: string
   databaseUrl?: string
   isProduction: boolean
@@ -58,6 +60,10 @@ export function parseBackendEnvironment(
     analysisWindowDays: parsed.ANALYSIS_WINDOW_DAYS,
     apiAverageLatencyTargetMs: parsed.API_AVERAGE_LATENCY_TARGET_MS,
     isProduction: parsed.NODE_ENV === 'production',
+  }
+
+  if (parsed.REFRESH_INTERVAL_MS !== undefined) {
+    environment.refreshIntervalMs = parsed.REFRESH_INTERVAL_MS
   }
 
   if (parsed.GITHUB_TOKEN !== undefined) {

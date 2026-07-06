@@ -3,8 +3,15 @@ import { AppShell } from '@/components/layout/AppShell.tsx'
 import { Section } from '@/components/ui/Section.tsx'
 import { appEnvironment } from '@/config/env.ts'
 import { getImpactDashboard } from '@/features/impact-dashboard/api/impactApi.ts'
+import { DashboardFilters } from '@/features/impact-dashboard/components/DashboardFilters.tsx'
+import { DimensionLineChart } from '@/features/impact-dashboard/components/DimensionLineChart.tsx'
 import { EngineerDetailPanel } from '@/features/impact-dashboard/components/EngineerDetailPanel.tsx'
 import { EngineerLeaderboard } from '@/features/impact-dashboard/components/EngineerLeaderboard.tsx'
+import { ImpactScoreBarChart } from '@/features/impact-dashboard/components/ImpactScoreBarChart.tsx'
+import {
+  getDimensionScore,
+  type DimensionFilter,
+} from '@/features/impact-dashboard/impactScoreDimensions.ts'
 import { MethodologyPanel } from '@/features/impact-dashboard/components/MethodologyPanel.tsx'
 import type {
   ImpactDashboardResponse,
@@ -16,42 +23,79 @@ export function ImpactDashboard() {
   const [data, setData] = useState<ImpactDashboardResponse | null>(null)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [selectedEngineerId, setSelectedEngineerId] = useState<string | null>(null)
+  const [areaFilter, setAreaFilter] = useState('all')
+  const [confidenceFilter, setConfidenceFilter] = useState('all')
+  const [dimensionFilter, setDimensionFilter] = useState<DimensionFilter>('all')
 
   useEffect(() => {
     let isMounted = true
+    let refreshTimer: number | undefined
 
-    getImpactDashboard()
-      .then((dashboardData) => {
+    async function loadDashboard(shouldResetSelection: boolean) {
+      try {
+        const dashboardData = await getImpactDashboard()
+
         if (!isMounted) {
           return
         }
 
+        setErrorMessage(null)
         setData(dashboardData)
-        setSelectedEngineerId(dashboardData.engineers[0]?.id ?? null)
-      })
-      .catch((error: unknown) => {
+        setSelectedEngineerId((currentId) => {
+          if (!shouldResetSelection && dashboardData.engineers.some((engineer) => engineer.id === currentId)) {
+            return currentId
+          }
+
+          return dashboardData.engineers[0]?.id ?? null
+        })
+      } catch (error: unknown) {
         if (isMounted) {
           setErrorMessage(error instanceof Error ? error.message : 'Unknown API error')
         }
-      })
+      }
+    }
+
+    void loadDashboard(true)
+    refreshTimer = window.setInterval(() => {
+      void loadDashboard(false)
+    }, 60_000)
 
     return () => {
       isMounted = false
+      window.clearInterval(refreshTimer)
     }
   }, [])
 
+  const visibleEngineers = useMemo(() => {
+    const engineers = data?.engineers ?? []
+
+    return [...engineers]
+      .filter((engineer) => areaFilter === 'all' || engineer.areas.includes(areaFilter))
+      .filter((engineer) => confidenceFilter === 'all' || engineer.confidence === confidenceFilter)
+      .sort((left, right) => getDimensionScore(right, dimensionFilter) - getDimensionScore(left, dimensionFilter))
+      .slice(0, 5)
+  }, [areaFilter, confidenceFilter, data?.engineers, dimensionFilter])
+
   const selectedEngineer = useMemo<ImpactEngineer | null>(() => {
-    if (data === null || selectedEngineerId === null) {
+    const firstVisibleEngineer = visibleEngineers[0]
+
+    if (firstVisibleEngineer === undefined) {
       return null
     }
 
-    return data.engineers.find((engineer) => engineer.id === selectedEngineerId) ?? null
-  }, [data, selectedEngineerId])
+    return visibleEngineers.find((engineer) => engineer.id === selectedEngineerId) ?? firstVisibleEngineer
+  }, [selectedEngineerId, visibleEngineers])
 
-  const topEngineers = useMemo(
-    () => data?.engineers.slice(0, 5) ?? [],
-    [data?.engineers],
-  )
+  useEffect(() => {
+    const firstVisibleEngineer = visibleEngineers[0]
+
+    if (
+      firstVisibleEngineer !== undefined &&
+      !visibleEngineers.some((engineer) => engineer.id === selectedEngineerId)
+    ) {
+      setSelectedEngineerId(firstVisibleEngineer.id)
+    }
+  }, [selectedEngineerId, visibleEngineers])
 
   const generatedAtLabel = useMemo(() => {
     if (data === null) {
@@ -63,6 +107,16 @@ export function ImpactDashboard() {
       timeStyle: 'short',
     }).format(new Date(data.generatedAt))
   }, [data])
+
+  const hasActiveFilters =
+    areaFilter !== 'all' || confidenceFilter !== 'all' || dimensionFilter !== 'all'
+
+  function resetFilters() {
+    setAreaFilter('all')
+    setConfidenceFilter('all')
+    setDimensionFilter('all')
+    setSelectedEngineerId(data?.engineers[0]?.id ?? null)
+  }
 
   return (
     <AppShell
@@ -90,7 +144,7 @@ export function ImpactDashboard() {
         </Section>
       )}
 
-      {data !== null && selectedEngineer !== null && (
+      {data !== null && (
         <>
           <div className="insight-strip" aria-label="Dashboard context">
             <div className="insight-strip__item">
@@ -107,11 +161,11 @@ export function ImpactDashboard() {
             </div>
             <div className="insight-strip__item">
               <span>Confidence</span>
-              <strong>{selectedEngineer.confidence}</strong>
+              <strong>{selectedEngineer?.confidence ?? 'No match'}</strong>
             </div>
             <div className="insight-strip__item">
               <span>Data source</span>
-              <strong>{data.dataFreshness.source.replace('_', ' ')}</strong>
+              <strong>{data.dataFreshness.source.replaceAll('_', ' ')}</strong>
             </div>
           </div>
 
@@ -120,14 +174,51 @@ export function ImpactDashboard() {
             title="Top 5 impactful engineers"
             description="Scores favor contribution patterns that made PostHog better, safer, faster, or easier to build."
           >
-            <div className="dashboard-grid">
-              <EngineerLeaderboard
-                engineers={topEngineers}
-                selectedEngineerId={selectedEngineer.id}
-                onSelectEngineer={setSelectedEngineerId}
-              />
-              <EngineerDetailPanel engineer={selectedEngineer} />
-            </div>
+            <DashboardFilters
+              areaFilter={areaFilter}
+              confidenceFilter={confidenceFilter}
+              dimensionFilter={dimensionFilter}
+              engineers={data.engineers}
+              onAreaFilterChange={setAreaFilter}
+              onConfidenceFilterChange={setConfidenceFilter}
+              onDimensionFilterChange={setDimensionFilter}
+            />
+
+            {selectedEngineer === null ? (
+              <div className="empty-state glass-panel">
+                <p>
+                  {data.engineers.length === 0
+                    ? 'No engineers were returned by the impact report.'
+                    : 'No engineers match the current filters.'}
+                </p>
+                {hasActiveFilters && (
+                  <button type="button" onClick={resetFilters}>
+                    Reset filters
+                  </button>
+                )}
+              </div>
+            ) : (
+              <>
+                <div className="charts-grid">
+                  <ImpactScoreBarChart
+                    dimensionFilter={dimensionFilter}
+                    engineers={visibleEngineers}
+                    selectedEngineerId={selectedEngineer.id}
+                    onSelectEngineer={setSelectedEngineerId}
+                  />
+                  <DimensionLineChart engineer={selectedEngineer} />
+                </div>
+
+                <div className="dashboard-grid">
+                  <EngineerLeaderboard
+                    engineers={visibleEngineers}
+                    selectedEngineerId={selectedEngineer.id}
+                    onSelectEngineer={setSelectedEngineerId}
+                  />
+                  <EngineerDetailPanel engineer={selectedEngineer} />
+                </div>
+              </>
+            )}
           </Section>
 
           <Section

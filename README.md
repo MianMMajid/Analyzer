@@ -43,9 +43,11 @@ Implemented:
 - Contributor identity normalization for aliases, noreply emails, co-authors, bots, diacritics, and ambiguous identities.
 - Migration runner for applying SQL migrations through `npm run migrate -w backend`.
 - Refresh job that collects GitHub signals, builds a scored report, and persists it to PostgreSQL.
+- Refresh worker supports `REFRESH_INTERVAL_MS=60000` so Railway can keep the 90-day report within a one-minute refresh cadence when a GitHub token is configured.
 - API repository that reads the latest completed PostgreSQL report when `DATABASE_URL` is configured, with local seed fallback for development only.
 - Scoring now uses capped evidence strength, issue linkage, review-quality weighting, recency decay, size guardrails, and team-relative normalization rather than raw PR/commit/review counts.
 - Post-merge adoption scoring compares later merged PRs against files and areas touched by earlier merged work.
+- Frontend dashboard includes area, confidence, and score-dimension filters plus clickable bar and line charts with engineer names and drill-down evidence.
 
 Not yet production-complete:
 
@@ -214,6 +216,7 @@ Backend env:
 | `GITHUB_REPOSITORY` | Yes | Repository to analyze, default `PostHog/posthog`. |
 | `ANALYSIS_WINDOW_DAYS` | Yes | Analysis window, default `90`. |
 | `API_AVERAGE_LATENCY_TARGET_MS` | Yes | Target average API latency, default `150`. |
+| `REFRESH_INTERVAL_MS` | Refresh worker | Optional continuous refresh interval. Use `60000` for a one-minute latest-feed cadence. |
 
 Frontend env:
 
@@ -238,7 +241,7 @@ Root scripts:
 | `npm run build:refresh` | Build backend artifacts for the refresh worker. |
 | `npm run start:backend` | Start the compiled backend API. |
 | `npm run start:frontend` | Start the frontend preview server on Railway's `$PORT`. |
-| `npm run start:refresh` | Run the compiled GitHub refresh worker once. |
+| `npm run start:refresh` | Run the compiled GitHub refresh worker once, or continuously when `REFRESH_INTERVAL_MS` is set. |
 | `npm run start:migrate` | Run compiled SQL migrations once. |
 | `npm run test` | Run all Vitest suites. |
 | `npm run check` | Run typecheck, lint, and build. |
