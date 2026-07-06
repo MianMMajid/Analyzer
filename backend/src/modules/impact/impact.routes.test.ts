@@ -15,6 +15,8 @@ describe('impact routes', () => {
 
     expect(response.statusCode).toBe(200)
     expect(response.headers['x-cache-status']).toBe('mock_seed')
+    expect(response.headers['x-request-id']).toBeDefined()
+    expect(response.headers['x-content-type-options']).toBe('nosniff')
     expect(response.json().engineers).toHaveLength(5)
   })
 

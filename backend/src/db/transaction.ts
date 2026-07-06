@@ -47,9 +47,6 @@ async function rollbackOrThrowAggregate(client: Queryable, originalError: unknow
   try {
     await client.query('rollback')
   } catch (rollbackError) {
-    throw new AggregateError(
-      [originalError, rollbackError],
-      'Transaction failed and rollback also failed.',
-    )
+    throw new AggregateError([originalError, rollbackError], 'Transaction failed and rollback also failed.')
   }
 }

@@ -1,8 +1,10 @@
+import { randomUUID } from 'node:crypto'
 import cors from '@fastify/cors'
+import helmet from '@fastify/helmet'
 import rateLimit from '@fastify/rate-limit'
 import Fastify from 'fastify'
 import type { BackendEnvironment } from './config/env.js'
-import { checkDatabaseReadiness, getSharedDatabasePool } from './db/client.js'
+import { buildDatabasePoolOptions, checkDatabaseReadiness, getSharedDatabasePool } from './db/client.js'
 import { registerErrorHandling } from './modules/http/errors.js'
 import { registerImpactRoutes } from './modules/impact/impact.routes.js'
 import { registerRequestTiming } from './modules/performance/requestTiming.js'
@@ -11,8 +13,12 @@ import { registerRequestTiming } from './modules/performance/requestTiming.js'
 export async function buildServer(environment: BackendEnvironment) {
   const server = Fastify({
     bodyLimit: 1_048_576,
+    genReqId: (request) => request.headers['x-request-id']?.toString() ?? randomUUID(),
     logger: true,
+    requestIdHeader: 'x-request-id',
   })
+
+  await server.register(helmet)
 
   await server.register(cors, {
     origin: environment.webOrigin,
@@ -25,6 +31,10 @@ export async function buildServer(environment: BackendEnvironment) {
 
   await registerErrorHandling(server)
   await registerRequestTiming(server, environment.apiAverageLatencyTargetMs)
+
+  server.addHook('onRequest', async (request, reply) => {
+    reply.header('x-request-id', request.id)
+  })
 
   server.get('/health', async () => ({
     status: 'ok',
@@ -41,10 +51,15 @@ export async function buildServer(environment: BackendEnvironment) {
       }
     }
 
-    const pool = getSharedDatabasePool({
-      databaseUrl: environment.databaseUrl,
-      applicationName: 'posthog-impact-ready',
-    })
+    const pool = getSharedDatabasePool(
+      buildDatabasePoolOptions(
+        {
+          databaseUrl: environment.databaseUrl,
+          databaseSslMode: environment.databaseSslMode,
+        },
+        'posthog-impact-ready',
+      ),
+    )
     const readiness = await checkDatabaseReadiness(pool)
 
     if (!readiness.ok) {

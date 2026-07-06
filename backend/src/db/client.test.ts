@@ -26,12 +26,17 @@ describe('database client', () => {
   })
 
   it('creates pools lazily and does not connect until queried', async () => {
-    const { createDatabasePool } = await import('./client.js')
+    const { buildDatabasePoolOptions, createDatabasePool } = await import('./client.js')
 
-    createDatabasePool({
-      databaseUrl: 'postgres://user:pass@localhost:5432/posthog_impact',
-      applicationName: 'impact-dashboard-test',
-    })
+    createDatabasePool(
+      buildDatabasePoolOptions(
+        {
+          databaseUrl: 'postgres://user:pass@localhost:5432/posthog_impact',
+          databaseSslMode: 'require',
+        },
+        'impact-dashboard-test',
+      ),
+    )
 
     expect(pgMocks.constructedConfigs).toHaveLength(1)
     expect(pgMocks.query).not.toHaveBeenCalled()
@@ -39,6 +44,7 @@ describe('database client', () => {
       connectionString: 'postgres://user:pass@localhost:5432/posthog_impact',
       application_name: 'impact-dashboard-test',
       max: 10,
+      ssl: { rejectUnauthorized: false },
     })
   })
 

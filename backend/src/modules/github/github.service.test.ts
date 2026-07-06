@@ -36,10 +36,7 @@ describe('GitHub collection service', () => {
     const client = {
       paginateJson: createMockClient([]).paginateJson,
       getJson: async () => ({
-        data: [
-          pullRequestFixture(1, '2026-05-01T00:00:00Z'),
-          pullRequestFixture(2, '2026-01-01T00:00:00Z'),
-        ],
+        data: [pullRequestFixture(1, '2026-05-01T00:00:00Z'), pullRequestFixture(2, '2026-01-01T00:00:00Z')],
       }),
     } satisfies GitHubClient
     const service = createGitHubCollectionService({
@@ -77,10 +74,12 @@ describe('GitHub collection service', () => {
       client,
     })
 
-    await expect(service.fetchPullRequestsUpdatedSince({
-      since: new Date('2026-04-07T00:00:00Z'),
-      maxPages: 1,
-    })).rejects.toThrow('GitHub pull request pagination exceeded the configured 1 page limit.')
+    await expect(
+      service.fetchPullRequestsUpdatedSince({
+        since: new Date('2026-04-07T00:00:00Z'),
+        maxPages: 1,
+      }),
+    ).rejects.toThrow('GitHub pull request pagination exceeded the configured 1 page limit.')
     expect(getJson).toHaveBeenCalledTimes(1)
   })
 
@@ -95,19 +94,17 @@ describe('GitHub collection service', () => {
       client,
     })
 
-    await expect(service.fetchPullRequestsUpdatedSince({
-      since: new Date('2026-04-07T00:00:00Z'),
-      maxPages: 0,
-    })).rejects.toThrow('GitHub pull request pagination maxPages must be a positive integer.')
+    await expect(
+      service.fetchPullRequestsUpdatedSince({
+        since: new Date('2026-04-07T00:00:00Z'),
+        maxPages: 0,
+      }),
+    ).rejects.toThrow('GitHub pull request pagination maxPages must be a positive integer.')
     expect(getJson).not.toHaveBeenCalled()
   })
 
   it('normalizes reviews, issue comments, and review comments for a PR', async () => {
-    const client = createMockClient([
-      [reviewFixture()],
-      [issueCommentFixture()],
-      [reviewCommentFixture()],
-    ])
+    const client = createMockClient([[reviewFixture()], [issueCommentFixture()], [reviewCommentFixture()]])
     const service = createGitHubCollectionService({
       repository: 'PostHog/posthog',
       client,

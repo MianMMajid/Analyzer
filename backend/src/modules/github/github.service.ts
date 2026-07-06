@@ -37,9 +37,7 @@ export type FetchPullRequestOptions = GitHubCollectionWindow & GitHubPageOptions
 export type GitHubCollectionService = {
   fetchBranches: (options?: GitHubPageOptions) => Promise<GitHubPaginatedResult<GitHubBranch>>
   fetchCommitsSince: (options: FetchCommitOptions) => Promise<GitHubPaginatedResult<GitHubCommit>>
-  fetchPullRequestsUpdatedSince: (
-    options: FetchPullRequestOptions,
-  ) => Promise<GitHubPaginatedResult<GitHubPullRequest>>
+  fetchPullRequestsUpdatedSince: (options: FetchPullRequestOptions) => Promise<GitHubPaginatedResult<GitHubPullRequest>>
   fetchPullRequestDiscussion: (
     pullRequestNumber: number,
     options?: GitHubPageOptions,
@@ -60,13 +58,9 @@ const validReviewStates = new Set<GitHubReviewState>([
   'PENDING',
 ])
 
-export function createGitHubCollectionService(
-  options: GitHubCollectionServiceOptions,
-): GitHubCollectionService {
+export function createGitHubCollectionService(options: GitHubCollectionServiceOptions): GitHubCollectionService {
   const repository =
-    typeof options.repository === 'string'
-      ? parseGitHubRepository(options.repository)
-      : options.repository
+    typeof options.repository === 'string' ? parseGitHubRepository(options.repository) : options.repository
   const clientOptions = options.token === undefined ? {} : { token: options.token }
   const client = options.client ?? createGitHubClient(clientOptions)
 
@@ -74,21 +68,13 @@ export function createGitHubCollectionService(
     return `/repos/${repository.owner}/${repository.name}${path}`
   }
 
-  async function fetchBranches(
-    options: GitHubPageOptions = {},
-  ): Promise<GitHubPaginatedResult<GitHubBranch>> {
-    const response = await client.paginateJson<unknown>(
-      repositoryPath('/branches'),
-      {},
-      options,
-    )
+  async function fetchBranches(options: GitHubPageOptions = {}): Promise<GitHubPaginatedResult<GitHubBranch>> {
+    const response = await client.paginateJson<unknown>(repositoryPath('/branches'), {}, options)
 
     return mapPaginatedResult(response, normalizeBranch)
   }
 
-  async function fetchCommitsSince(
-    options: FetchCommitOptions,
-  ): Promise<GitHubPaginatedResult<GitHubCommit>> {
+  async function fetchCommitsSince(options: FetchCommitOptions): Promise<GitHubPaginatedResult<GitHubCommit>> {
     const branchNames = options.branchNames ?? [undefined]
     const seenCommitShas = new Set<string>()
     const commits: GitHubCommit[] = []
@@ -100,11 +86,7 @@ export function createGitHubCollectionService(
         until: options.until?.toISOString(),
         sha: branchName,
       }
-      const response = await client.paginateJson<unknown>(
-        repositoryPath('/commits'),
-        query,
-        options,
-      )
+      const response = await client.paginateJson<unknown>(repositoryPath('/commits'), query, options)
       pages.push(...response.pages)
 
       for (const item of response.items) {
@@ -173,9 +155,7 @@ export function createGitHubCollectionService(
       // newest-updated first and stop once the full page is older than the window.
       shouldContinue =
         response.nextUrl !== undefined &&
-        normalizedPage.some(
-          (pullRequest) => new Date(pullRequest.updatedAt).getTime() >= options.since.getTime(),
-        )
+        normalizedPage.some((pullRequest) => new Date(pullRequest.updatedAt).getTime() >= options.since.getTime())
       page += 1
     }
 
@@ -187,31 +167,15 @@ export function createGitHubCollectionService(
     options: GitHubPageOptions = {},
   ): Promise<GitHubPullRequestDiscussion> {
     const [reviews, issueComments, reviewComments] = await Promise.all([
-      client.paginateJson<unknown>(
-        repositoryPath(`/pulls/${pullRequestNumber}/reviews`),
-        {},
-        options,
-      ),
-      client.paginateJson<unknown>(
-        repositoryPath(`/issues/${pullRequestNumber}/comments`),
-        {},
-        options,
-      ),
-      client.paginateJson<unknown>(
-        repositoryPath(`/pulls/${pullRequestNumber}/comments`),
-        {},
-        options,
-      ),
+      client.paginateJson<unknown>(repositoryPath(`/pulls/${pullRequestNumber}/reviews`), {}, options),
+      client.paginateJson<unknown>(repositoryPath(`/issues/${pullRequestNumber}/comments`), {}, options),
+      client.paginateJson<unknown>(repositoryPath(`/pulls/${pullRequestNumber}/comments`), {}, options),
     ])
 
     return {
       reviews: reviews.items.map((item) => normalizeReview(item, pullRequestNumber)),
-      issueComments: issueComments.items.map((item) =>
-        normalizeIssueComment(item, pullRequestNumber),
-      ),
-      reviewComments: reviewComments.items.map((item) =>
-        normalizeReviewComment(item, pullRequestNumber),
-      ),
+      issueComments: issueComments.items.map((item) => normalizeIssueComment(item, pullRequestNumber)),
+      reviewComments: reviewComments.items.map((item) => normalizeReviewComment(item, pullRequestNumber)),
     }
   }
 
@@ -328,7 +292,9 @@ function normalizePullRequest(value: unknown): GitHubPullRequest {
     commits: readNumber(record, 'commits') ?? 0,
     reviewCommentCount: readNumber(record, 'review_comments') ?? 0,
     issueCommentCount: readNumber(record, 'comments') ?? 0,
-    linkedIssueNumbers: extractLinkedIssueNumbers(`${requireString(record, 'title', 'pull_request.title')}\n${readString(record, 'body') ?? ''}`),
+    linkedIssueNumbers: extractLinkedIssueNumbers(
+      `${requireString(record, 'title', 'pull_request.title')}\n${readString(record, 'body') ?? ''}`,
+    ),
     htmlUrl: requireString(record, 'html_url', 'pull_request.html_url'),
   }
 
@@ -366,10 +332,7 @@ function normalizeReview(value: unknown, pullRequestNumber: number): GitHubPullR
   return review
 }
 
-function normalizeIssueComment(
-  value: unknown,
-  pullRequestNumber: number,
-): GitHubPullRequestIssueComment {
+function normalizeIssueComment(value: unknown, pullRequestNumber: number): GitHubPullRequestIssueComment {
   const record = requireRecord(value, 'pull request issue comment')
   const user = optionalRecord(record['user'])
   const comment: GitHubPullRequestIssueComment = {
@@ -389,10 +352,7 @@ function normalizeIssueComment(
   return comment
 }
 
-function normalizeReviewComment(
-  value: unknown,
-  pullRequestNumber: number,
-): GitHubPullRequestReviewComment {
+function normalizeReviewComment(value: unknown, pullRequestNumber: number): GitHubPullRequestReviewComment {
   const record = requireRecord(value, 'pull request review comment')
   const user = optionalRecord(record['user'])
   const comment: GitHubPullRequestReviewComment = {
@@ -475,9 +435,7 @@ function requireRecord(value: unknown, field: string): UnknownRecord {
 }
 
 function optionalRecord(value: unknown): UnknownRecord | undefined {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-    ? (value as UnknownRecord)
-    : undefined
+  return typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as UnknownRecord) : undefined
 }
 
 function requireString(record: UnknownRecord, key: string, field: string): string {

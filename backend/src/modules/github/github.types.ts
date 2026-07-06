@@ -81,13 +81,7 @@ export type GitHubPullRequest = {
   htmlUrl: string
 }
 
-export type GitHubReviewState =
-  | 'APPROVED'
-  | 'CHANGES_REQUESTED'
-  | 'COMMENTED'
-  | 'DISMISSED'
-  | 'PENDING'
-  | 'UNKNOWN'
+export type GitHubReviewState = 'APPROVED' | 'CHANGES_REQUESTED' | 'COMMENTED' | 'DISMISSED' | 'PENDING' | 'UNKNOWN'
 
 export type GitHubPullRequestReview = {
   id: number

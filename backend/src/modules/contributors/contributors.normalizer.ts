@@ -77,7 +77,8 @@ export function normalizeContributorIdentity(
   if (canonicalId !== undefined) {
     return compactIdentity({
       id: canonicalId,
-      displayName: indexes.displayNames.get(canonicalId) ?? input.name?.trim() ?? normalizedLogin ?? inferredLogin ?? canonicalId,
+      displayName:
+        indexes.displayNames.get(canonicalId) ?? input.name?.trim() ?? normalizedLogin ?? inferredLogin ?? canonicalId,
       confidence: resolveAliasConfidence(indexes, canonicalId, signals),
       isBot: false,
       matchedBy,
@@ -204,7 +205,9 @@ function buildAliasIndexes(options: ContributorNormalizerOptions): AliasIndexes 
       })),
     ),
   ]
-  const displayNames = new Map((options.knownContributors ?? []).map((contributor) => [contributor.id, contributor.displayName]))
+  const displayNames = new Map(
+    (options.knownContributors ?? []).map((contributor) => [contributor.id, contributor.displayName]),
+  )
 
   return {
     byLogin: buildAliasIndex(aliases, 'login', normalizeLogin),
@@ -234,10 +237,7 @@ function buildAliasIndex(
   return index
 }
 
-function findCandidateContributorIds(
-  indexes: AliasIndexes,
-  identity: ContributorSignals,
-): readonly string[] {
+function findCandidateContributorIds(indexes: AliasIndexes, identity: ContributorSignals): readonly string[] {
   const candidates = new Set<string>()
   const signals = [
     [indexes.byLogin, identity.normalizedLogin],
@@ -260,7 +260,10 @@ function resolveAliasConfidence(
   canonicalId: string,
   identity: ContributorSignals,
 ): 'exact' | 'high' | 'medium' {
-  if (hasCandidate(indexes.byLogin, identity.normalizedLogin, canonicalId) || hasCandidate(indexes.byEmail, identity.normalizedEmail, canonicalId)) {
+  if (
+    hasCandidate(indexes.byLogin, identity.normalizedLogin, canonicalId) ||
+    hasCandidate(indexes.byEmail, identity.normalizedEmail, canonicalId)
+  ) {
     return 'exact'
   }
 
@@ -285,9 +288,12 @@ function collectMatchedSignals(identity: ContributorSignals): readonly string[] 
 }
 
 function isBotIdentity(identity: ContributorSignals): boolean {
-  const values = [identity.normalizedLogin, identity.normalizedEmail, identity.normalizedName, identity.inferredLogin].filter(
-    (value): value is string => value !== undefined,
-  )
+  const values = [
+    identity.normalizedLogin,
+    identity.normalizedEmail,
+    identity.normalizedName,
+    identity.inferredLogin,
+  ].filter((value): value is string => value !== undefined)
 
   return values.some((value) => botLoginPatterns.some((pattern) => pattern.test(value)))
 }
@@ -334,6 +340,9 @@ function compactCoAuthor(coAuthor: {
   }
 }
 
-function compactOptional<Key extends string, Value>(key: Key, value: Value | undefined): Record<Key, Value> | Record<string, never> {
-  return value === undefined ? {} : { [key]: value } as Record<Key, Value>
+function compactOptional<Key extends string, Value>(
+  key: Key,
+  value: Value | undefined,
+): Record<Key, Value> | Record<string, never> {
+  return value === undefined ? {} : ({ [key]: value } as Record<Key, Value>)
 }

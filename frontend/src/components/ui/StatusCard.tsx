@@ -8,12 +8,7 @@ type StatusCardProps = {
   tone?: StatusTone
 }
 
-export function StatusCard({
-  description,
-  title,
-  tone = 'accent',
-  value,
-}: StatusCardProps) {
+export function StatusCard({ description, title, tone = 'accent', value }: StatusCardProps) {
   return (
     <article className="status-card glass-panel" data-tone={tone}>
       <p className="status-card__value">{value}</p>

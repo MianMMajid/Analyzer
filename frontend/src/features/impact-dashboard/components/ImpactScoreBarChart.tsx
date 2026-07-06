@@ -24,8 +24,7 @@ export function ImpactScoreBarChart({
   const buttonRefs = useRef<Array<HTMLButtonElement | null>>([])
   const dimensionLabel = getDimensionLabel(dimensionFilter)
   const selectedEngineer = engineers.find((engineer) => engineer.id === selectedEngineerId)
-  const selectedScore =
-    selectedEngineer === undefined ? null : getDimensionScore(selectedEngineer, dimensionFilter)
+  const selectedScore = selectedEngineer === undefined ? null : getDimensionScore(selectedEngineer, dimensionFilter)
   const maxScore = Math.max(...engineers.map((engineer) => getDimensionScore(engineer, dimensionFilter)), 100)
 
   function moveSelection(nextIndex: number) {

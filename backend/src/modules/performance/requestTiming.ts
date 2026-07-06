@@ -10,10 +10,7 @@ function durationMillisecondsSince(startTime: bigint): number {
 
 // Timing is registered once at the HTTP boundary so every route can be measured
 // against the Railway latency target without duplicating logging in handlers.
-export async function registerRequestTiming(
-  server: FastifyInstance,
-  averageLatencyTargetMs: number,
-): Promise<void> {
+export async function registerRequestTiming(server: FastifyInstance, averageLatencyTargetMs: number): Promise<void> {
   server.addHook('onRequest', async (request) => {
     requestStartTimes.set(request, process.hrtime.bigint())
   })

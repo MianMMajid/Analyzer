@@ -1,8 +1,5 @@
 import { useMemo } from 'react'
-import {
-  impactScoreDimensions,
-  type DimensionFilter,
-} from '@/features/impact-dashboard/impactScoreDimensions.ts'
+import { impactScoreDimensions, type DimensionFilter } from '@/features/impact-dashboard/impactScoreDimensions.ts'
 import type { ImpactEngineer } from '@/features/impact-dashboard/types.ts'
 
 type DashboardFiltersProps = {

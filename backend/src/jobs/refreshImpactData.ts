@@ -1,5 +1,5 @@
 import { backendEnvironment, type BackendEnvironment } from '../config/env.js'
-import { getSharedDatabasePool } from '../db/client.js'
+import { buildDatabasePoolOptions, getSharedDatabasePool } from '../db/client.js'
 import { runMigrations } from '../db/migrator.js'
 import { buildImpactReportFromGitHub } from '../modules/impact/impact.ingestion.js'
 import { saveImpactReport } from '../modules/impact/impact.repository.js'
@@ -13,7 +13,9 @@ export type RefreshImpactDataResult = {
   readonly generatedAt: string
 }
 
-export async function refreshImpactData(environment: BackendEnvironment = backendEnvironment): Promise<RefreshImpactDataResult> {
+export async function refreshImpactData(
+  environment: BackendEnvironment = backendEnvironment,
+): Promise<RefreshImpactDataResult> {
   if (environment.databaseUrl === undefined) {
     throw new Error('DATABASE_URL is required to refresh and persist impact data.')
   }
@@ -22,10 +24,15 @@ export async function refreshImpactData(environment: BackendEnvironment = backen
     throw new Error('GITHUB_TOKEN is required to refresh impact data from GitHub.')
   }
 
-  const pool = getSharedDatabasePool({
-    databaseUrl: environment.databaseUrl,
-    applicationName: 'posthog-impact-refresh',
-  })
+  const pool = getSharedDatabasePool(
+    buildDatabasePoolOptions(
+      {
+        databaseUrl: environment.databaseUrl,
+        databaseSslMode: environment.databaseSslMode,
+      },
+      'posthog-impact-refresh',
+    ),
+  )
 
   await runMigrations(pool)
   const report = await buildImpactReportFromGitHub({
@@ -65,12 +72,14 @@ async function runInlineScheduledRefresh(environment: BackendEnvironment): Promi
         `Impact refresh complete. reportId=${result.reportId} engineers=${result.engineerCount} generatedAt=${result.generatedAt}`,
       )
     } catch (error) {
-      console.error(JSON.stringify({
-        event: 'impact_refresh_failed',
-        repository: environment.githubRepository,
-        analysisWindowDays: environment.analysisWindowDays,
-        error: serializeError(error),
-      }))
+      console.error(
+        JSON.stringify({
+          event: 'impact_refresh_failed',
+          repository: environment.githubRepository,
+          analysisWindowDays: environment.analysisWindowDays,
+          error: serializeError(error),
+        }),
+      )
     } finally {
       isRefreshing = false
     }
@@ -92,6 +101,7 @@ async function runQueuedScheduledRefresh(environment: BackendEnvironment): Promi
   const queue = createQueueClient({
     driver: environment.queueDriver,
     ...(environment.databaseUrl === undefined ? {} : { databaseUrl: environment.databaseUrl }),
+    databaseSslMode: environment.databaseSslMode,
   })
 
   await queue.work(
@@ -104,32 +114,38 @@ async function runQueuedScheduledRefresh(environment: BackendEnvironment): Promi
       }
 
       try {
-        console.log(JSON.stringify({
-          event: 'impact_refresh_started',
-          jobId: job.id,
-          repository: job.payload.repository,
-          analysisWindowDays: job.payload.analysisWindowDays,
-          requestedBy: job.payload.requestedBy,
-        }))
+        console.log(
+          JSON.stringify({
+            event: 'impact_refresh_started',
+            jobId: job.id,
+            repository: job.payload.repository,
+            analysisWindowDays: job.payload.analysisWindowDays,
+            requestedBy: job.payload.requestedBy,
+          }),
+        )
 
         const result = await refreshImpactData(jobEnvironment)
 
-        console.log(JSON.stringify({
-          event: 'impact_refresh_complete',
-          jobId: job.id,
-          reportId: result.reportId,
-          engineers: result.engineerCount,
-          generatedAt: result.generatedAt,
-        }))
+        console.log(
+          JSON.stringify({
+            event: 'impact_refresh_complete',
+            jobId: job.id,
+            reportId: result.reportId,
+            engineers: result.engineerCount,
+            generatedAt: result.generatedAt,
+          }),
+        )
       } catch (error) {
-        console.error(JSON.stringify({
-          event: 'impact_refresh_failed',
-          jobId: job.id,
-          repository: job.payload.repository,
-          analysisWindowDays: job.payload.analysisWindowDays,
-          requestedBy: job.payload.requestedBy,
-          error: serializeError(error),
-        }))
+        console.error(
+          JSON.stringify({
+            event: 'impact_refresh_failed',
+            jobId: job.id,
+            repository: job.payload.repository,
+            analysisWindowDays: job.payload.analysisWindowDays,
+            requestedBy: job.payload.requestedBy,
+            error: serializeError(error),
+          }),
+        )
         throw error
       }
     },
@@ -143,21 +159,25 @@ async function runQueuedScheduledRefresh(environment: BackendEnvironment): Promi
         buildRefreshJobPayload(environment, requestedBy),
         buildRefreshQueueOptions(environment),
       )
-      console.log(JSON.stringify({
-        event: 'impact_refresh_queued',
-        jobId: job.id,
-        repository: environment.githubRepository,
-        analysisWindowDays: environment.analysisWindowDays,
-        requestedBy,
-      }))
+      console.log(
+        JSON.stringify({
+          event: 'impact_refresh_queued',
+          jobId: job.id,
+          repository: environment.githubRepository,
+          analysisWindowDays: environment.analysisWindowDays,
+          requestedBy,
+        }),
+      )
     } catch (error) {
-      console.error(JSON.stringify({
-        event: 'impact_refresh_enqueue_failed',
-        repository: environment.githubRepository,
-        analysisWindowDays: environment.analysisWindowDays,
-        requestedBy,
-        error: serializeError(error),
-      }))
+      console.error(
+        JSON.stringify({
+          event: 'impact_refresh_enqueue_failed',
+          repository: environment.githubRepository,
+          analysisWindowDays: environment.analysisWindowDays,
+          requestedBy,
+          error: serializeError(error),
+        }),
+      )
     }
   }
 

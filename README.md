@@ -46,7 +46,7 @@ Technical aspects used:
 - GitHub ingestion: paginated and bounded collection for PRs, commits, reviews, comments, changed files, linked issues, and adoption signals across the 90-day analysis window.
 - Contributor safety: identity normalization covers GitHub logins, email aliases, noreply emails, co-authors, bots, diacritics, and ambiguous identities.
 - Performance: the user-facing API reads precomputed reports instead of running GitHub analysis synchronously, keeping average response latency near the 150ms target.
-- Testing and quality: Vitest coverage for contracts, backend scoring/ingestion/API/database behavior, frontend API parsing/components, plus `npm run check` for typecheck, lint, and build.
+- Testing and quality: Vitest coverage for contracts, backend scoring/ingestion/API/database behavior, frontend API parsing/components, plus `npm run check` for typecheck, formatting, lint, coverage, and build.
 
 ## Current State
 
@@ -59,15 +59,15 @@ Implemented:
 - Runtime response validation on backend and frontend API boundary.
 - Global API error shape.
 - Rate limiting, CORS, liveness, readiness, and request-duration logging.
-- Vitest coverage for contracts, backend routes/env/scoring, and frontend API parsing.
-- GitHub Actions CI running install, check, and tests.
+- Vitest coverage gates for contracts, backend routes/env/scoring, and frontend API/render behavior.
+- GitHub Actions CI running install and the full check gate.
 - Railway-ready config and env examples.
 - Local 90-day PostHog branch/commit export tooling.
 - PostgreSQL client foundation with lazy pool creation, readiness checks, schema constants, and initial SQL migration.
 - Queue abstraction with local in-memory behavior plus durable PostgreSQL execution through `pg-boss`.
 - GitHub collection module with pagination, rate-limit retry handling, normalized PR/commit/review types, and tests.
 - Contributor identity normalization for aliases, noreply emails, co-authors, bots, diacritics, and ambiguous identities.
-- Migration runner for applying SQL migrations through `npm run migrate -w backend`.
+- Migration runner for applying SQL migrations through `npm run migrate -w backend`; production backend startup runs compiled migrations before listening.
 - Refresh job that collects GitHub signals, builds a scored report, and persists it to PostgreSQL.
 - Refresh worker supports `REFRESH_INTERVAL_MS=60000` so Railway can enqueue a one-minute latest-feed cadence when a GitHub token is configured.
 - Durable refresh jobs use bounded retries, exponential backoff, singleton dedupe, and `impact.refresh.dlq` dead-letter storage so transient GitHub failures do not block the dashboard API.
@@ -233,59 +233,63 @@ http://localhost:4000
 
 Backend env:
 
-| Variable | Required | Purpose |
-| --- | --- | --- |
-| `NODE_ENV` | Yes | Runtime mode. Production enables stricter checks. |
-| `PORT` | Yes | Backend port. Defaults to `4000` locally. |
-| `WEB_ORIGIN` | Yes | Allowed frontend origin for CORS. |
-| `DATABASE_URL` | Production | PostgreSQL connection string. |
-| `GITHUB_TOKEN` | Production | GitHub API token for ingestion. |
-| `GITHUB_REPOSITORY` | Yes | Repository to analyze, default `PostHog/posthog`. |
-| `ANALYSIS_WINDOW_DAYS` | Yes | Analysis window, default `90`. |
-| `API_AVERAGE_LATENCY_TARGET_MS` | Yes | Target average API latency, default `150`. |
-| `REFRESH_INTERVAL_MS` | Refresh worker | Optional continuous refresh interval. Use `60000` for a one-minute latest-feed cadence. |
-| `QUEUE_DRIVER` | Refresh worker | Use `pg-boss` in production for durable retry/DLQ behavior. Defaults to `in-memory` locally. |
-| `REFRESH_RETRY_LIMIT` | Refresh worker | Job retry budget before DLQ. Defaults to `6`. |
-| `REFRESH_RETRY_DELAY_SECONDS` | Refresh worker | Initial retry delay in seconds. Defaults to `60`. |
-| `REFRESH_RETRY_DELAY_MAX_SECONDS` | Refresh worker | Maximum exponential backoff delay in seconds. Defaults to `900`. |
-| `REFRESH_JOB_EXPIRE_SECONDS` | Refresh worker | Active-job timeout before retry/failure. Defaults to `3600`. |
+| Variable                          | Required       | Purpose                                                                                      |
+| --------------------------------- | -------------- | -------------------------------------------------------------------------------------------- |
+| `NODE_ENV`                        | Yes            | Runtime mode. Production enables stricter checks.                                            |
+| `PORT`                            | Yes            | Backend port. Defaults to `4000` locally.                                                    |
+| `WEB_ORIGIN`                      | Yes            | Allowed frontend origin for CORS.                                                            |
+| `DATABASE_URL`                    | Production     | PostgreSQL connection string.                                                                |
+| `DATABASE_SSL_MODE`               | Production     | Set to `require` for managed Postgres connections that require TLS. Defaults to `disable`.   |
+| `GITHUB_TOKEN`                    | Production     | GitHub API token for ingestion.                                                              |
+| `GITHUB_REPOSITORY`               | Yes            | Repository to analyze, default `PostHog/posthog`.                                            |
+| `ANALYSIS_WINDOW_DAYS`            | Yes            | Analysis window, default `90`.                                                               |
+| `API_AVERAGE_LATENCY_TARGET_MS`   | Yes            | Target average API latency, default `150`.                                                   |
+| `REFRESH_INTERVAL_MS`             | Refresh worker | Optional continuous refresh interval. Use `60000` for a one-minute latest-feed cadence.      |
+| `QUEUE_DRIVER`                    | Refresh worker | Use `pg-boss` in production for durable retry/DLQ behavior. Defaults to `in-memory` locally. |
+| `REFRESH_RETRY_LIMIT`             | Refresh worker | Job retry budget before DLQ. Defaults to `6`.                                                |
+| `REFRESH_RETRY_DELAY_SECONDS`     | Refresh worker | Initial retry delay in seconds. Defaults to `60`.                                            |
+| `REFRESH_RETRY_DELAY_MAX_SECONDS` | Refresh worker | Maximum exponential backoff delay in seconds. Defaults to `900`.                             |
+| `REFRESH_JOB_EXPIRE_SECONDS`      | Refresh worker | Active-job timeout before retry/failure. Defaults to `3600`.                                 |
 
 Frontend env:
 
-| Variable | Required | Purpose |
-| --- | --- | --- |
-| `VITE_APP_NAME` | Yes | Browser title/app label. |
-| `VITE_API_BASE_URL` | Yes | Backend base URL. |
+| Variable                     | Required        | Purpose                                                                                                     |
+| ---------------------------- | --------------- | ----------------------------------------------------------------------------------------------------------- |
+| `VITE_APP_NAME`              | Yes             | Browser title/app label.                                                                                    |
+| `VITE_API_BASE_URL`          | Yes             | Backend base URL.                                                                                           |
 | `VITE_PREVIEW_ALLOWED_HOSTS` | Railway preview | Comma-separated hostnames allowed by `vite preview`, for example `frontend-production-c68e.up.railway.app`. |
 
 ## Scripts
 
 Root scripts:
 
-| Command | Purpose |
-| --- | --- |
-| `npm run dev:frontend` | Start the React/Vite dashboard. |
-| `npm run dev:backend` | Start the Fastify API in watch mode. |
-| `npm run typecheck` | Build shared contract and type-check all workspaces. |
-| `npm run lint` | Run oxlint across packages, frontend, and backend. |
-| `npm run build` | Build shared contract, backend, and frontend. |
-| `npm run build:backend` | Build only the shared contract and backend for Railway. |
-| `npm run build:frontend` | Build only the shared contract and frontend for Railway. |
-| `npm run build:refresh` | Build backend artifacts for the refresh worker. |
-| `npm run start:backend` | Start the compiled backend API. |
-| `npm run start:frontend` | Start the frontend preview server on Railway's `$PORT`. |
-| `npm run start:refresh` | Run the compiled GitHub refresh worker once, or continuously when `REFRESH_INTERVAL_MS` is set. |
-| `npm run start:migrate` | Run compiled SQL migrations once. |
-| `npm run test` | Run all Vitest suites. |
-| `npm run check` | Run typecheck, lint, and build. |
+| Command                  | Purpose                                                                                         |
+| ------------------------ | ----------------------------------------------------------------------------------------------- |
+| `npm run dev:frontend`   | Start the React/Vite dashboard.                                                                 |
+| `npm run dev:backend`    | Start the Fastify API in watch mode.                                                            |
+| `npm run typecheck`      | Build shared contract and type-check all workspaces.                                            |
+| `npm run lint`           | Run oxlint across packages, frontend, and backend.                                              |
+| `npm run build`          | Build shared contract, backend, and frontend.                                                   |
+| `npm run build:backend`  | Build only the shared contract and backend for Railway.                                         |
+| `npm run build:frontend` | Build only the shared contract and frontend for Railway.                                        |
+| `npm run build:refresh`  | Build backend artifacts for the refresh worker.                                                 |
+| `npm run start:backend`  | Run compiled SQL migrations, then start the compiled backend API.                               |
+| `npm run start:frontend` | Start the frontend preview server on Railway's `$PORT`.                                         |
+| `npm run start:refresh`  | Run the compiled GitHub refresh worker once, or continuously when `REFRESH_INTERVAL_MS` is set. |
+| `npm run start:migrate`  | Run compiled SQL migrations once.                                                               |
+| `npm run test`           | Run all Vitest suites.                                                                          |
+| `npm run test:coverage`  | Run all Vitest suites with coverage thresholds.                                                 |
+| `npm run format`         | Format supported source and docs with Prettier.                                                 |
+| `npm run format:check`   | Verify formatting without writing changes.                                                      |
+| `npm run check`          | Run typecheck, format check, lint, coverage tests, and build.                                   |
 
 Backend scripts:
 
-| Command | Purpose |
-| --- | --- |
-| `npm run migrate -w backend` | Apply SQL migrations to `DATABASE_URL`. |
-| `npm run refresh -w backend` | Collect GitHub signals, score the report, and persist it to PostgreSQL. |
-| `npm run export:posthog-90d -w backend` | Export 90-day PostHog branch and commit data into `.data/`. |
+| Command                                 | Purpose                                                                 |
+| --------------------------------------- | ----------------------------------------------------------------------- |
+| `npm run migrate -w backend`            | Apply SQL migrations to `DATABASE_URL`.                                 |
+| `npm run refresh -w backend`            | Collect GitHub signals, score the report, and persist it to PostgreSQL. |
+| `npm run export:posthog-90d -w backend` | Export 90-day PostHog branch and commit data into `.data/`.             |
 
 ## Quality Gates
 
@@ -293,10 +297,9 @@ Before committing or deploying:
 
 ```bash
 npm run check
-npm run test
 ```
 
-CI runs the same gates in [`.github/workflows/ci.yml`](./.github/workflows/ci.yml).
+CI runs the same gate in [`.github/workflows/ci.yml`](./.github/workflows/ci.yml), including a Postgres service for migration integration coverage.
 
 Current test coverage includes:
 
@@ -305,11 +308,12 @@ Current test coverage includes:
 - Backend scoring tests.
 - Backend route tests through Fastify injection.
 - Backend DB client/readiness/migration tests.
+- Backend Postgres migration integration tests when `DATABASE_INTEGRATION_TEST_URL` is available.
 - Backend queue client tests.
 - Backend GitHub client/service tests.
 - Backend contributor normalization/repository tests.
 - Backend GitHub-to-impact ingestion and DB persistence tests.
-- Frontend API response validation tests.
+- Frontend API response validation, error boundary, and dashboard filter tests.
 
 Production standard from the architecture plan:
 
@@ -376,9 +380,10 @@ Backend production checks:
 
 - `GITHUB_TOKEN` must be set.
 - `DATABASE_URL` must be set.
+- `DATABASE_SSL_MODE=require` should be set when the managed Postgres connection requires TLS.
 - `WEB_ORIGIN` must match the deployed frontend origin.
 - `QUEUE_DRIVER=pg-boss` must be set on the refresh service.
-- Run `npm run migrate -w backend` before the first refresh.
+- Backend startup runs compiled SQL migrations automatically; `npm run migrate -w backend` remains available for manual recovery.
 - Run `npm run refresh -w backend` once to seed the first persisted impact report.
 - `/health` must return ok.
 - `/ready` must confirm required dependencies are configured.
@@ -400,8 +405,8 @@ Frontend production checks:
 
 ## Next Production Milestones
 
-1. Enable durable queue execution with `pg-boss` or an equivalent Railway-compatible worker.
-2. Add Railway scheduled refresh every 6 to 12 hours.
-3. Deploy backend, frontend, and PostgreSQL to Railway.
-4. Run migrations and first refresh against production env vars.
-5. Verify `GET /api/v1/impact/summary` averages under 150ms in production.
+1. Deploy backend, frontend, refresh worker, and PostgreSQL to Railway with production env vars.
+2. Run the first refresh against production env vars.
+3. Verify `GET /api/v1/impact/summary` averages under 150ms in production.
+4. Add monitoring/alerting on readiness failures, refresh failures, and API latency.
+5. Split the remaining large ingestion module into smaller collection, scoring-prep, and adoption-analysis units.

@@ -19,9 +19,11 @@ describe('withTransaction', () => {
     const pool = { connect: vi.fn(async () => client) }
     const originalError = new Error('insert failed')
 
-    await expect(withTransaction(pool, async () => {
-      throw originalError
-    })).rejects.toBe(originalError)
+    await expect(
+      withTransaction(pool, async () => {
+        throw originalError
+      }),
+    ).rejects.toBe(originalError)
 
     expect(client.query).toHaveBeenCalledWith('rollback')
     expect(client.release).toHaveBeenCalledTimes(1)
@@ -39,9 +41,11 @@ describe('withTransaction', () => {
     })
     const pool = { connect: vi.fn(async () => client) }
 
-    await expect(withTransaction(pool, async () => {
-      throw originalError
-    })).rejects.toMatchObject({
+    await expect(
+      withTransaction(pool, async () => {
+        throw originalError
+      }),
+    ).rejects.toMatchObject({
       name: 'AggregateError',
       message: 'Transaction failed and rollback also failed.',
       errors: [originalError, rollbackError],
@@ -51,7 +55,10 @@ describe('withTransaction', () => {
 })
 
 function createTransactionClient(
-  queryImplementation: (sql: string, params?: readonly unknown[]) => Promise<{ rows: Record<string, unknown>[]; rowCount: number | null }> = async () => ({
+  queryImplementation: (
+    sql: string,
+    params?: readonly unknown[],
+  ) => Promise<{ rows: Record<string, unknown>[]; rowCount: number | null }> = async () => ({
     rowCount: 1,
     rows: [],
   }),

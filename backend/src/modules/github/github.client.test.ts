@@ -19,11 +19,7 @@ describe('GitHub client', () => {
       fetch: fetchMock,
     })
 
-    const result = await client.paginateJson<{ id: number }>(
-      '/repos/PostHog/posthog/branches',
-      {},
-      { perPage: 1 },
-    )
+    const result = await client.paginateJson<{ id: number }>('/repos/PostHog/posthog/branches', {}, { perPage: 1 })
 
     expect(result.items).toEqual([{ id: 1 }, { id: 2 }])
     expect(result.pages).toHaveLength(2)
@@ -41,10 +37,7 @@ describe('GitHub client', () => {
     const fetchMock = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(
-        jsonResponse(
-          { message: 'You have exceeded a secondary rate limit.' },
-          { status: 429, 'retry-after': '2' },
-        ),
+        jsonResponse({ message: 'You have exceeded a secondary rate limit.' }, { status: 429, 'retry-after': '2' }),
       )
       .mockResolvedValueOnce(jsonResponse([{ id: 1 }]))
 
@@ -89,9 +82,7 @@ describe('GitHub client', () => {
   it('throws typed API errors after retry budget is exhausted', async () => {
     const fetchMock = vi
       .fn<typeof fetch>()
-      .mockImplementation(async () =>
-        jsonResponse({ message: 'Service unavailable.' }, { status: 503 }),
-      )
+      .mockImplementation(async () => jsonResponse({ message: 'Service unavailable.' }, { status: 503 }))
     const client = createGitHubClient({
       baseUrl: 'https://api.github.test',
       fetch: fetchMock,
@@ -125,10 +116,7 @@ describe('GitHub client', () => {
   })
 })
 
-function jsonResponse(
-  body: unknown,
-  options: Record<string, string | number> = {},
-): Response {
+function jsonResponse(body: unknown, options: Record<string, string | number> = {}): Response {
   const { status = 200, ...rawHeaders } = options
   const headers = new Headers()
 

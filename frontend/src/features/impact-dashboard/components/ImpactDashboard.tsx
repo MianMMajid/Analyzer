@@ -2,20 +2,14 @@ import { useEffect, useMemo, useState } from 'react'
 import { AppShell } from '@/components/layout/AppShell.tsx'
 import { Section } from '@/components/ui/Section.tsx'
 import { appEnvironment } from '@/config/env.ts'
-import { getImpactDashboard } from '@/features/impact-dashboard/api/impactApi.ts'
+import { ImpactApiError, getImpactDashboard } from '@/features/impact-dashboard/api/impactApi.ts'
 import { DashboardFilters } from '@/features/impact-dashboard/components/DashboardFilters.tsx'
 import { DimensionLineChart } from '@/features/impact-dashboard/components/DimensionLineChart.tsx'
 import { EngineerDetailPanel } from '@/features/impact-dashboard/components/EngineerDetailPanel.tsx'
 import { EngineerLeaderboard } from '@/features/impact-dashboard/components/EngineerLeaderboard.tsx'
 import { ImpactScoreBarChart } from '@/features/impact-dashboard/components/ImpactScoreBarChart.tsx'
-import {
-  getDimensionScore,
-  type DimensionFilter,
-} from '@/features/impact-dashboard/impactScoreDimensions.ts'
-import type {
-  ImpactDashboardResponse,
-  ImpactEngineer,
-} from '@/features/impact-dashboard/types.ts'
+import { getDimensionScore, type DimensionFilter } from '@/features/impact-dashboard/impactScoreDimensions.ts'
+import type { ImpactDashboardResponse, ImpactEngineer } from '@/features/impact-dashboard/types.ts'
 
 // The page owns orchestration state while scoring and GitHub ingestion stay on the backend.
 export function ImpactDashboard() {
@@ -52,7 +46,7 @@ export function ImpactDashboard() {
         })
       } catch (error: unknown) {
         if (isMounted) {
-          setErrorMessage(error instanceof Error ? error.message : 'Unknown API error')
+          setErrorMessage(toDashboardErrorMessage(error))
           setLastCheckedAt(Date.now())
         }
       }
@@ -127,15 +121,13 @@ export function ImpactDashboard() {
     }
 
     const reportAgeLabel = formatElapsedTime(currentTime - new Date(data.generatedAt).getTime())
-    const checkedLabel = lastCheckedAt === null
-      ? 'checking'
-      : `checked ${formatElapsedTime(currentTime - lastCheckedAt)}`
+    const checkedLabel =
+      lastCheckedAt === null ? 'checking' : `checked ${formatElapsedTime(currentTime - lastCheckedAt)}`
 
     return `Report ${reportAgeLabel} / ${checkedLabel}`
   }, [currentTime, data, lastCheckedAt])
 
-  const hasActiveFilters =
-    areaFilter !== 'all' || confidenceFilter !== 'all' || dimensionFilter !== 'all'
+  const hasActiveFilters = areaFilter !== 'all' || confidenceFilter !== 'all' || dimensionFilter !== 'all'
 
   function resetFilters() {
     setAreaFilter('all')
@@ -293,4 +285,12 @@ function formatElapsedTime(milliseconds: number): string {
   }
 
   return `${Math.floor(hours / 24)}d ago`
+}
+
+function toDashboardErrorMessage(error: unknown): string {
+  if (error instanceof ImpactApiError) {
+    return `${error.message} [${error.code}]`
+  }
+
+  return error instanceof Error ? error.message : 'Unknown API error'
 }

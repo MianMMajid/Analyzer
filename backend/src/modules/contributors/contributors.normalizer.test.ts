@@ -50,7 +50,10 @@ describe('normalizeContributorIdentity', () => {
   })
 
   it('matches aliases by email and login to a canonical contributor', () => {
-    const identity = normalizeContributorIdentity({ login: 'RAULNOG', email: 'raul@example.com' }, { knownContributors })
+    const identity = normalizeContributorIdentity(
+      { login: 'RAULNOG', email: 'raul@example.com' },
+      { knownContributors },
+    )
 
     expect(identity.id).toBe('engineer:raul')
     expect(identity.displayName).toBe('Raúl Negrón-Otero')

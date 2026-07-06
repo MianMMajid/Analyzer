@@ -14,6 +14,7 @@ const EnvironmentSchema = z
     REFRESH_RETRY_DELAY_SECONDS: z.coerce.number().int().positive().default(60),
     REFRESH_RETRY_DELAY_MAX_SECONDS: z.coerce.number().int().positive().default(900),
     REFRESH_JOB_EXPIRE_SECONDS: z.coerce.number().int().positive().default(3600),
+    DATABASE_SSL_MODE: z.enum(['disable', 'require']).default('disable'),
     GITHUB_TOKEN: z.string().min(1).optional(),
     DATABASE_URL: z.string().min(1).optional(),
   })
@@ -52,15 +53,14 @@ export type BackendEnvironment = {
   refreshRetryDelaySeconds: number
   refreshRetryDelayMaxSeconds: number
   refreshJobExpireSeconds: number
+  databaseSslMode: 'disable' | 'require'
   githubToken?: string
   databaseUrl?: string
   isProduction: boolean
 }
 
 // Environment parsing is centralized so Railway configuration fails before the server accepts traffic.
-export function parseBackendEnvironment(
-  source: NodeJS.ProcessEnv,
-): BackendEnvironment {
+export function parseBackendEnvironment(source: NodeJS.ProcessEnv): BackendEnvironment {
   const parsed = EnvironmentSchema.parse(source)
   const environment: BackendEnvironment = {
     nodeEnv: parsed.NODE_ENV,
@@ -74,6 +74,7 @@ export function parseBackendEnvironment(
     refreshRetryDelaySeconds: parsed.REFRESH_RETRY_DELAY_SECONDS,
     refreshRetryDelayMaxSeconds: parsed.REFRESH_RETRY_DELAY_MAX_SECONDS,
     refreshJobExpireSeconds: parsed.REFRESH_JOB_EXPIRE_SECONDS,
+    databaseSslMode: parsed.DATABASE_SSL_MODE,
     isProduction: parsed.NODE_ENV === 'production',
   }
 

@@ -7,11 +7,7 @@ type MethodologyPanelProps = {
   summary: string
 }
 
-export function MethodologyPanel({
-  dimensions,
-  guardrails,
-  summary,
-}: MethodologyPanelProps) {
+export function MethodologyPanel({ dimensions, guardrails, summary }: MethodologyPanelProps) {
   return (
     <div className="methodology-layout">
       <p className="methodology-summary">{summary}</p>

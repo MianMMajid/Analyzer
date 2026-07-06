@@ -3,8 +3,14 @@
   color: var(--ww-text);
   background: var(--ww-bg);
   font-family:
-    Inter, Geist, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
-    "Segoe UI", sans-serif;
+    Inter,
+    Geist,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif;
   font-synthesis: none;
   line-height: 1.5;
   text-rendering: optimizeLegibility;
@@ -46,8 +52,7 @@ body {
   margin: 0;
   background:
     linear-gradient(145deg, var(--ww-bg-orange-wash), transparent 34%),
-    linear-gradient(35deg, var(--ww-bg-blue-wash), transparent 36%),
-    var(--ww-bg);
+    linear-gradient(35deg, var(--ww-bg-blue-wash), transparent 36%), var(--ww-bg);
 }
 
 button,
@@ -166,15 +171,15 @@ dd {
   width: calc((100% - 8px) / var(--nav-items));
   border: 1px solid rgba(255, 255, 255, 0.64);
   border-radius: 999px;
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.86), rgba(255, 255, 255, 0.42)),
-    var(--ww-surface);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.86), rgba(255, 255, 255, 0.42)), var(--ww-surface);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.82),
     0 10px 24px rgba(31, 42, 68, 0.12);
   content: '';
   transform: translateX(calc(var(--active-index) * 100%));
-  transition: transform 220ms ease, width 220ms ease;
+  transition:
+    transform 220ms ease,
+    width 220ms ease;
 }
 
 .app-nav a {
@@ -499,17 +504,13 @@ dd {
   min-height: 12px;
   border: 1px solid rgba(232, 83, 42, 0.25);
   border-radius: 8px 8px 3px 3px;
-  background:
-    linear-gradient(180deg, rgba(255, 175, 244, 0.55), rgba(232, 83, 42, 0.88)),
-    var(--ww-accent-orange);
+  background: linear-gradient(180deg, rgba(255, 175, 244, 0.55), rgba(232, 83, 42, 0.88)), var(--ww-accent-orange);
   box-shadow: 0 10px 20px rgba(232, 83, 42, 0.16);
 }
 
 .bar-chart__item[data-selected='true'] .bar-chart__bar {
   border-color: var(--ww-text);
-  background:
-    linear-gradient(180deg, rgba(74, 167, 138, 0.45), rgba(0, 153, 255, 0.9)),
-    var(--ww-accent-blue);
+  background: linear-gradient(180deg, rgba(74, 167, 138, 0.45), rgba(0, 153, 255, 0.9)), var(--ww-accent-blue);
 }
 
 .bar-chart__label {
@@ -961,6 +962,20 @@ dd {
 .error-message {
   border-left: 3px solid var(--ww-accent-orange);
   padding-left: 12px;
+}
+
+.error-boundary {
+  display: grid;
+  min-height: calc(100svh - 120px);
+  align-content: center;
+  gap: 16px;
+  padding: 48px 0;
+}
+
+.error-boundary h1 {
+  color: var(--ww-text);
+  font-size: 2rem;
+  line-height: 1.05;
 }
 
 .hero-section,

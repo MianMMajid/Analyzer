@@ -18,9 +18,7 @@ export function EngineerDetailPanel({ engineer }: EngineerDetailPanelProps) {
             @{engineer.githubLogin} · {engineer.primaryImpactArea}
           </p>
         </div>
-        <strong aria-label={`${engineer.totalScore} total impact score`}>
-          {engineer.totalScore}
-        </strong>
+        <strong aria-label={`${engineer.totalScore} total impact score`}>{engineer.totalScore}</strong>
       </div>
 
       <p className="detail-panel__summary">{engineer.explanation}</p>

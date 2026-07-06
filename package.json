@@ -19,19 +19,31 @@
     "build:backend": "npm run build -w @repo/impact-contract && npm run build -w backend",
     "build:frontend": "npm run build -w @repo/impact-contract && npm run build -w frontend",
     "build:refresh": "npm run build:backend",
-    "start:backend": "npm run start -w backend",
+    "start:backend": "npm run start:migrate && npm run start -w backend",
     "start:frontend": "npm run preview -w frontend -- --port ${PORT:-4173}",
     "start:refresh": "node backend/dist/jobs/refreshImpactData.js",
     "start:migrate": "node backend/dist/db/migrate.js",
     "railway:migrate": "npm run migrate -w backend",
     "railway:refresh": "npm run refresh -w backend",
     "typecheck": "npm run build -w @repo/impact-contract && npm run typecheck -w @repo/impact-contract && npm run typecheck -w backend && npm run typecheck -w frontend",
+    "format": "prettier --write \"**/*.{ts,tsx,json,css,html,md,yml,yaml}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,json,css,html,md,yml,yaml}\"",
     "lint": "oxlint packages frontend backend",
     "test": "npm run build -w @repo/impact-contract && npm run test -w @repo/impact-contract && npm run test -w backend && npm run test -w frontend",
-    "check": "npm run typecheck && npm run lint && npm run build"
+    "test:coverage": "npm run build -w @repo/impact-contract && npm run coverage -w @repo/impact-contract && npm run coverage -w backend && npm run coverage -w frontend",
+    "check": "npm run typecheck && npm run format:check && npm run lint && npm run test:coverage && npm run build",
+    "prepare": "husky || true"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,json,css,html,md,yml,yaml}": "prettier --write"
   },
   "devDependencies": {
+    "@vitest/coverage-v8": "^4.1.10",
+    "husky": "^9.1.7",
+    "jsdom": "^29.1.1",
+    "lint-staged": "^17.0.8",
     "oxlint": "^1.71.0",
+    "prettier": "^3.9.4",
     "typescript": "~6.0.2",
     "vitest": "^4.0.15"
   }
