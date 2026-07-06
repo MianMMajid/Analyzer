@@ -46,6 +46,7 @@ railway variable set --service backend \
   GITHUB_REPOSITORY=PostHog/posthog \
   ANALYSIS_WINDOW_DAYS=90 \
   API_AVERAGE_LATENCY_TARGET_MS=150 \
+  NIXPACKS_NODE_VERSION=24 \
   DATABASE_URL='${{postgres.DATABASE_URL}}' \
   NIXPACKS_BUILD_CMD='npm run build:backend' \
   NIXPACKS_START_CMD='npm run start:backend'
@@ -60,6 +61,7 @@ Set frontend variables:
 railway variable set --service frontend \
   VITE_APP_NAME='PostHog Impact Dashboard' \
   VITE_API_BASE_URL='https://YOUR_BACKEND_DOMAIN' \
+  NIXPACKS_NODE_VERSION=24 \
   NIXPACKS_BUILD_CMD='npm run build:frontend' \
   NIXPACKS_START_CMD='npm run start:frontend'
 ```
@@ -72,6 +74,7 @@ railway variable set --service refresh \
   GITHUB_REPOSITORY=PostHog/posthog \
   ANALYSIS_WINDOW_DAYS=90 \
   REFRESH_INTERVAL_MS=60000 \
+  NIXPACKS_NODE_VERSION=24 \
   DATABASE_URL='${{postgres.DATABASE_URL}}' \
   NIXPACKS_BUILD_CMD='npm run build:refresh' \
   NIXPACKS_START_CMD='npm run start:refresh'
