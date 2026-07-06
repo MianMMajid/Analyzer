@@ -38,12 +38,13 @@ Implemented:
 - Railway-ready config and env examples.
 - Local 90-day PostHog branch/commit export tooling.
 - PostgreSQL client foundation with lazy pool creation, readiness checks, schema constants, and initial SQL migration.
-- Queue abstraction with local in-memory behavior and explicit durable-driver guardrails.
+- Queue abstraction with local in-memory behavior plus durable PostgreSQL execution through `pg-boss`.
 - GitHub collection module with pagination, rate-limit retry handling, normalized PR/commit/review types, and tests.
 - Contributor identity normalization for aliases, noreply emails, co-authors, bots, diacritics, and ambiguous identities.
 - Migration runner for applying SQL migrations through `npm run migrate -w backend`.
 - Refresh job that collects GitHub signals, builds a scored report, and persists it to PostgreSQL.
-- Refresh worker supports `REFRESH_INTERVAL_MS=60000` so Railway can keep the 90-day report within a one-minute refresh cadence when a GitHub token is configured.
+- Refresh worker supports `REFRESH_INTERVAL_MS=60000` so Railway can enqueue a one-minute latest-feed cadence when a GitHub token is configured.
+- Durable refresh jobs use bounded retries, exponential backoff, singleton dedupe, and `impact.refresh.dlq` dead-letter storage so transient GitHub failures do not block the dashboard API.
 - API repository that reads the latest completed PostgreSQL report when `DATABASE_URL` is configured, with local seed fallback for development only.
 - Scoring now uses capped evidence strength, issue linkage, review-quality weighting, recency decay, size guardrails, and team-relative normalization rather than raw PR/commit/review counts.
 - Post-merge adoption scoring compares later merged PRs against files and areas touched by earlier merged work.
@@ -51,8 +52,7 @@ Implemented:
 
 Not yet production-complete:
 
-- Durable `pg-boss` queue execution is not enabled yet.
-- Railway services still need to be created and configured with production env vars and a scheduled refresh command.
+- Railway services still need to be configured with the production queue env vars and refreshed after deploy.
 
 Deployment instructions are in [RAILWAY_DEPLOYMENT.md](./RAILWAY_DEPLOYMENT.md).
 
@@ -218,6 +218,11 @@ Backend env:
 | `ANALYSIS_WINDOW_DAYS` | Yes | Analysis window, default `90`. |
 | `API_AVERAGE_LATENCY_TARGET_MS` | Yes | Target average API latency, default `150`. |
 | `REFRESH_INTERVAL_MS` | Refresh worker | Optional continuous refresh interval. Use `60000` for a one-minute latest-feed cadence. |
+| `QUEUE_DRIVER` | Refresh worker | Use `pg-boss` in production for durable retry/DLQ behavior. Defaults to `in-memory` locally. |
+| `REFRESH_RETRY_LIMIT` | Refresh worker | Job retry budget before DLQ. Defaults to `6`. |
+| `REFRESH_RETRY_DELAY_SECONDS` | Refresh worker | Initial retry delay in seconds. Defaults to `60`. |
+| `REFRESH_RETRY_DELAY_MAX_SECONDS` | Refresh worker | Maximum exponential backoff delay in seconds. Defaults to `900`. |
+| `REFRESH_JOB_EXPIRE_SECONDS` | Refresh worker | Active-job timeout before retry/failure. Defaults to `3600`. |
 
 Frontend env:
 
@@ -339,13 +344,14 @@ Recommended Railway services:
 - `backend`: Fastify API service.
 - `frontend`: static Vite frontend service.
 - `postgres`: Railway PostgreSQL service.
-- scheduled refresh job: every 6 to 12 hours.
+- `refresh`: continuous worker with `REFRESH_INTERVAL_MS=60000` and `QUEUE_DRIVER=pg-boss`.
 
 Backend production checks:
 
 - `GITHUB_TOKEN` must be set.
 - `DATABASE_URL` must be set.
 - `WEB_ORIGIN` must match the deployed frontend origin.
+- `QUEUE_DRIVER=pg-boss` must be set on the refresh service.
 - Run `npm run migrate -w backend` before the first refresh.
 - Run `npm run refresh -w backend` once to seed the first persisted impact report.
 - `/health` must return ok.

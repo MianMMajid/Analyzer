@@ -9,6 +9,11 @@ const EnvironmentSchema = z
     ANALYSIS_WINDOW_DAYS: z.coerce.number().int().positive().default(90),
     API_AVERAGE_LATENCY_TARGET_MS: z.coerce.number().int().positive().default(150),
     REFRESH_INTERVAL_MS: z.coerce.number().int().positive().optional(),
+    QUEUE_DRIVER: z.enum(['in-memory', 'pg-boss']).default('in-memory'),
+    REFRESH_RETRY_LIMIT: z.coerce.number().int().nonnegative().default(6),
+    REFRESH_RETRY_DELAY_SECONDS: z.coerce.number().int().positive().default(60),
+    REFRESH_RETRY_DELAY_MAX_SECONDS: z.coerce.number().int().positive().default(900),
+    REFRESH_JOB_EXPIRE_SECONDS: z.coerce.number().int().positive().default(3600),
     GITHUB_TOKEN: z.string().min(1).optional(),
     DATABASE_URL: z.string().min(1).optional(),
   })
@@ -42,6 +47,11 @@ export type BackendEnvironment = {
   analysisWindowDays: number
   apiAverageLatencyTargetMs: number
   refreshIntervalMs?: number
+  queueDriver: 'in-memory' | 'pg-boss'
+  refreshRetryLimit: number
+  refreshRetryDelaySeconds: number
+  refreshRetryDelayMaxSeconds: number
+  refreshJobExpireSeconds: number
   githubToken?: string
   databaseUrl?: string
   isProduction: boolean
@@ -59,6 +69,11 @@ export function parseBackendEnvironment(
     githubRepository: parsed.GITHUB_REPOSITORY,
     analysisWindowDays: parsed.ANALYSIS_WINDOW_DAYS,
     apiAverageLatencyTargetMs: parsed.API_AVERAGE_LATENCY_TARGET_MS,
+    queueDriver: parsed.QUEUE_DRIVER,
+    refreshRetryLimit: parsed.REFRESH_RETRY_LIMIT,
+    refreshRetryDelaySeconds: parsed.REFRESH_RETRY_DELAY_SECONDS,
+    refreshRetryDelayMaxSeconds: parsed.REFRESH_RETRY_DELAY_MAX_SECONDS,
+    refreshJobExpireSeconds: parsed.REFRESH_JOB_EXPIRE_SECONDS,
     isProduction: parsed.NODE_ENV === 'production',
   }
 

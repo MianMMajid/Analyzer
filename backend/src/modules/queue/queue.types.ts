@@ -1,6 +1,6 @@
 export type QueueDriver = 'in-memory' | 'pg-boss'
 
-export type QueueJobName = 'impact.refresh'
+export type QueueJobName = 'impact.refresh' | 'impact.refresh.dlq'
 
 export type RefreshImpactJobPayload = {
   repository: string
@@ -10,6 +10,7 @@ export type RefreshImpactJobPayload = {
 
 export type QueueJobPayloadMap = {
   'impact.refresh': RefreshImpactJobPayload
+  'impact.refresh.dlq': RefreshImpactJobPayload
 }
 
 export type QueueJobStatus = 'queued' | 'running' | 'completed' | 'failed'
@@ -17,6 +18,16 @@ export type QueueJobStatus = 'queued' | 'running' | 'completed' | 'failed'
 export type QueueEnqueueOptions = {
   dedupeKey?: string
   runAt?: Date
+  retryLimit?: number
+  retryDelaySeconds?: number
+  retryDelayMaxSeconds?: number
+  retryBackoff?: boolean
+  expireInSeconds?: number
+  deadLetterQueue?: QueueJobName
+}
+
+export type QueueWorkOptions = {
+  concurrency?: number
 }
 
 export type QueuedJob<Name extends QueueJobName = QueueJobName> = {
@@ -37,6 +48,11 @@ export type QueueClient = {
     payload: QueueJobPayloadMap[Name],
     options?: QueueEnqueueOptions,
   ): Promise<QueuedJob<Name>>
+  work<Name extends QueueJobName>(
+    name: Name,
+    handler: (job: QueuedJob<Name>) => Promise<void>,
+    options?: QueueWorkOptions,
+  ): Promise<void>
   listQueuedJobs(): Promise<readonly QueuedJob[]>
   close(): Promise<void>
 }

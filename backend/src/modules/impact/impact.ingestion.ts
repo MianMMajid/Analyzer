@@ -226,12 +226,12 @@ async function fetchFilesForPullRequests(
   service: GitHubCollectionService,
   pullRequests: readonly GitHubPullRequest[],
 ): Promise<ReadonlyMap<number, readonly GitHubPullRequestFile[]>> {
-  const entries = await Promise.all(
-    pullRequests.map(async (pullRequest) => {
-      const result = await service.fetchPullRequestFiles(pullRequest.number, { perPage: 100 })
-      return [pullRequest.number, result.items] as const
-    }),
-  )
+  const entries: Array<readonly [number, readonly GitHubPullRequestFile[]]> = []
+
+  for (const pullRequest of pullRequests) {
+    const result = await service.fetchPullRequestFiles(pullRequest.number, { perPage: 100 })
+    entries.push([pullRequest.number, result.items] as const)
+  }
 
   return new Map(entries)
 }
