@@ -189,6 +189,8 @@ dd {
   padding: 0 10px;
   font-size: 0.82rem;
   font-weight: 850;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
   text-decoration: none;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -959,6 +961,48 @@ dd {
 .error-message {
   border-left: 3px solid var(--ww-accent-orange);
   padding-left: 12px;
+}
+
+.hero-section,
+.insight-strip,
+.charts-grid,
+.leaderboard-list,
+.detail-panel,
+.leadership-context {
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    filter 180ms ease,
+    opacity 180ms ease,
+    transform 180ms ease;
+}
+
+.app-shell[data-active-section='overview'] .hero-section,
+.app-shell[data-active-section='overview'] .insight-strip,
+.app-shell[data-active-section='leaderboard'] .charts-grid,
+.app-shell[data-active-section='leaderboard'] .leaderboard-list,
+.app-shell[data-active-section='evidence'] .detail-panel,
+.app-shell[data-active-section='methodology'] .leadership-context {
+  filter: saturate(1.08);
+  transform: translateY(-2px);
+}
+
+.app-shell[data-active-section='overview'] .insight-strip__item,
+.app-shell[data-active-section='leaderboard'] .chart-panel,
+.app-shell[data-active-section='leaderboard'] .leaderboard-row[data-selected='true'],
+.app-shell[data-active-section='evidence'] .detail-panel,
+.app-shell[data-active-section='methodology'] .leadership-context {
+  border-color: rgba(232, 83, 42, 0.52);
+  box-shadow:
+    0 20px 54px rgba(232, 83, 42, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.68);
+}
+
+.app-shell[data-active-section='leaderboard'] .detail-panel,
+.app-shell[data-active-section='evidence'] .charts-grid,
+.app-shell[data-active-section='methodology'] .charts-grid,
+.app-shell[data-active-section='methodology'] .dashboard-grid {
+  opacity: 0.88;
 }
 
 @media (min-width: 901px) {

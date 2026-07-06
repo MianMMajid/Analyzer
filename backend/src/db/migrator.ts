@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
+import { type Queryable, type TransactionPool, withTransaction } from './transaction.js'
 
 export type SqlMigration = {
   readonly version: string
@@ -12,9 +13,7 @@ export type MigrationResult = {
   readonly skipped: readonly string[]
 }
 
-export type MigrationDatabase = {
-  query(sql: string, values?: readonly unknown[]): Promise<{ rows: Record<string, unknown>[]; rowCount: number | null }>
-}
+export type MigrationDatabase = Queryable & TransactionPool
 
 export const sqlMigrations = [
   {
@@ -48,17 +47,12 @@ export async function runMigrations(
     }
 
     const sql = await readFile(fileURLToPath(migration.fileUrl), 'utf8')
-    await pool.query('begin')
 
-    try {
-      await pool.query(sql)
-      await pool.query('insert into schema_migrations (version, name) values ($1, $2)', [migration.version, migration.name])
-      await pool.query('commit')
-      applied.push(migration.version)
-    } catch (error) {
-      await pool.query('rollback')
-      throw error
-    }
+    await withTransaction(pool, async (client) => {
+      await client.query(sql)
+      await client.query('insert into schema_migrations (version, name) values ($1, $2)', [migration.version, migration.name])
+    })
+    applied.push(migration.version)
   }
 
   return { applied, skipped }

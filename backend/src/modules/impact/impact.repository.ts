@@ -3,6 +3,7 @@ import { ImpactEngineerSchema } from '@repo/impact-contract'
 import { backendEnvironment, type BackendEnvironment } from '../../config/env.js'
 import { getSharedDatabasePool } from '../../db/client.js'
 import { databaseTables } from '../../db/schema.js'
+import { type Queryable, type TransactionPool, withTransaction } from '../../db/transaction.js'
 import { seedAnalysisWindow, seedImpactEngineers, seedReportGeneratedAt } from './impact.data.js'
 import type { ImpactDashboardResponse, ImpactEngineer } from './impact.types.js'
 
@@ -14,18 +15,6 @@ export type ImpactReportRecord = {
   analysisWindow: ImpactDashboardResponse['analysisWindow']
   engineers: readonly ImpactEngineer[]
   source: ImpactReportSource
-}
-
-type Queryable = {
-  query(sql: string, values?: readonly unknown[]): Promise<{ rows: Record<string, unknown>[]; rowCount: number | null }>
-}
-
-type TransactionClient = Queryable & {
-  release(): void
-}
-
-type TransactionPool = Queryable & {
-  connect(): Promise<TransactionClient>
 }
 
 const ImpactReportRecordSchema = z.object({
@@ -110,10 +99,8 @@ export async function getLatestPersistedImpactReport(
 
 export async function saveImpactReport(database: TransactionPool, report: ImpactReportRecord): Promise<number> {
   const parsedReport = ImpactReportRecordSchema.parse(report)
-  const client = await database.connect()
 
-  try {
-    await client.query('begin')
+  return withTransaction(database, async (client) => {
     const reportResult = await client.query(
       `
         insert into ${databaseTables.impactReports}
@@ -141,14 +128,8 @@ export async function saveImpactReport(database: TransactionPool, report: Impact
       await insertEvidence(client, reportId, parsedReport.generatedAt, engineerId, engineer)
     }
 
-    await client.query('commit')
     return reportId
-  } catch (error) {
-    await client.query('rollback')
-    throw error
-  } finally {
-    client.release()
-  }
+  })
 }
 
 async function upsertEngineer(database: Queryable, repository: string, engineer: ImpactEngineer): Promise<number> {
