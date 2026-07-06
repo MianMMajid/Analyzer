@@ -182,7 +182,17 @@ async function upsertEngineer(database: Queryable, repository: string, engineer:
 
 function readId(row: Record<string, unknown> | undefined): number | undefined {
   const value = row?.['id']
-  return typeof value === 'number' ? value : undefined
+
+  if (typeof value === 'number') {
+    return value
+  }
+
+  if (typeof value === 'string') {
+    const parsedValue = Number.parseInt(value, 10)
+    return Number.isSafeInteger(parsedValue) ? parsedValue : undefined
+  }
+
+  return undefined
 }
 
 async function insertEvidence(
