@@ -87,6 +87,26 @@ describe('GitHub collection service', () => {
       commitId: 'abc123',
     })
   })
+
+  it('normalizes changed files for a PR', async () => {
+    const client = createMockClient([[fileFixture()]])
+    const service = createGitHubCollectionService({
+      repository: 'PostHog/posthog',
+      client,
+    })
+
+    const files = await service.fetchPullRequestFiles(42)
+
+    expect(files.items).toEqual([
+      {
+        path: 'frontend/src/App.tsx',
+        status: 'modified',
+        additions: 12,
+        deletions: 4,
+        changes: 16,
+      },
+    ])
+  })
 })
 
 function createMockClient(pages: readonly (readonly unknown[])[]): GitHubClient {
@@ -195,5 +215,15 @@ function reviewCommentFixture(): unknown {
     path: 'frontend/src/App.tsx',
     commit_id: 'abc123',
     html_url: 'https://github.com/PostHog/posthog/pull/42#discussion_r3',
+  }
+}
+
+function fileFixture(): unknown {
+  return {
+    filename: 'frontend/src/App.tsx',
+    status: 'modified',
+    additions: 12,
+    deletions: 4,
+    changes: 16,
   }
 }

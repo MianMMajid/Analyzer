@@ -45,11 +45,11 @@ Implemented:
 - Refresh job that collects GitHub signals, builds a scored report, and persists it to PostgreSQL.
 - API repository that reads the latest completed PostgreSQL report when `DATABASE_URL` is configured, with local seed fallback for development.
 - Scoring now uses capped evidence strength, issue linkage, review-quality weighting, recency decay, size guardrails, and team-relative normalization rather than raw PR/commit/review counts.
+- Post-merge adoption scoring compares later merged PRs against files and areas touched by earlier merged work.
 
 Not yet production-complete:
 
 - Durable `pg-boss` queue execution is not enabled yet.
-- Post-merge adoption graph is not implemented yet.
 - Railway services still need to be created and configured with production env vars and a scheduled refresh command.
 
 The full implementation blueprint is in [FINAL_ARCHITECTURE_PLAN.md](./FINAL_ARCHITECTURE_PLAN.md). [ARCHITECTURE.md](./ARCHITECTURE.md) intentionally stays short and points to that source of truth.
@@ -353,8 +353,7 @@ Frontend production checks:
 ## Next Production Milestones
 
 1. Enable durable queue execution with `pg-boss` or an equivalent Railway-compatible worker.
-2. Add post-merge adoption scoring from later activity on touched paths.
-3. Add Railway scheduled refresh every 6 to 12 hours.
-4. Deploy backend, frontend, and PostgreSQL to Railway.
-5. Run migrations and first refresh against production env vars.
-6. Verify `GET /api/v1/impact/summary` averages under 150ms in production.
+2. Add Railway scheduled refresh every 6 to 12 hours.
+3. Deploy backend, frontend, and PostgreSQL to Railway.
+4. Run migrations and first refresh against production env vars.
+5. Verify `GET /api/v1/impact/summary` averages under 150ms in production.

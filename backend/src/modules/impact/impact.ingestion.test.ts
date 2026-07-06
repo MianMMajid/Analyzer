@@ -1,7 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
 import { buildImpactReportFromGitHub } from './impact.ingestion.js'
 import type { GitHubCollectionService } from '../github/github.service.js'
-import type { GitHubCommit, GitHubPullRequest, GitHubPullRequestReview } from '../github/github.types.js'
+import type {
+  GitHubCommit,
+  GitHubPullRequest,
+  GitHubPullRequestFile,
+  GitHubPullRequestReview,
+} from '../github/github.types.js'
 
 const commits: readonly GitHubCommit[] = [
   {
@@ -50,7 +55,57 @@ const pullRequests: readonly GitHubPullRequest[] = [
     linkedIssueNumbers: [456],
     htmlUrl: 'https://github.com/PostHog/posthog/pull/123',
   },
+  {
+    id: 2,
+    number: 124,
+    title: 'feat(ci): build on telemetry dashboard',
+    body: 'Uses the new telemetry surface from #123.',
+    state: 'closed',
+    isDraft: false,
+    authorLogin: 'grace',
+    createdAt: '2026-07-03T00:00:00.000Z',
+    updatedAt: '2026-07-04T00:00:00.000Z',
+    mergedAt: '2026-07-04T00:00:00.000Z',
+    baseRefName: 'master',
+    headRefName: 'ci-follow-up',
+    labels: ['ci'],
+    additions: 8,
+    deletions: 1,
+    changedFiles: 1,
+    commits: 1,
+    reviewCommentCount: 0,
+    issueCommentCount: 0,
+    linkedIssueNumbers: [],
+    htmlUrl: 'https://github.com/PostHog/posthog/pull/124',
+  },
 ]
+
+const fileMap = new Map<number, readonly GitHubPullRequestFile[]>([
+  [
+    123,
+    [
+      {
+        path: '.github/workflows/ci.yml',
+        status: 'modified',
+        additions: 10,
+        deletions: 2,
+        changes: 12,
+      },
+    ],
+  ],
+  [
+    124,
+    [
+      {
+        path: '.github/workflows/ci.yml',
+        status: 'modified',
+        additions: 8,
+        deletions: 1,
+        changes: 9,
+      },
+    ],
+  ],
+])
 
 const reviews: readonly GitHubPullRequestReview[] = [
   {
@@ -79,6 +134,10 @@ const service = {
     issueComments: [],
     reviewComments: [],
   })),
+  fetchPullRequestFiles: vi.fn(async (pullRequestNumber: number) => ({
+    items: fileMap.get(pullRequestNumber) ?? [],
+    pages: [],
+  })),
 } satisfies GitHubCollectionService
 
 describe('buildImpactReportFromGitHub', () => {
@@ -97,7 +156,7 @@ describe('buildImpactReportFromGitHub', () => {
       primaryImpactArea: 'CI and testing',
     })
     expect(report.engineers[0]?.explanation).toContain('Activity counts are kept as diagnostics')
-    expect(report.engineers[0]?.evidence[0]?.reason).toContain('Linked issue')
+    expect(report.engineers[0]?.evidence.some((evidence) => evidence.contributionType === 'Post-merge adoption')).toBe(true)
     expect(report.engineers.some((engineer) => engineer.githubLogin === 'grace')).toBe(true)
   })
 })
