@@ -809,6 +809,14 @@ dd {
 }
 
 @media (max-width: 1120px) {
+  .dashboard-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .segmented-control {
+    grid-column: 1 / -1;
+  }
+
   .status-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
@@ -840,6 +848,13 @@ dd {
   .charts-grid,
   .why-grid {
     grid-template-columns: 1fr;
+  }
+
+  .hero-section h1,
+  .hero-summary {
+    grid-column: auto;
+    grid-row: auto;
+    max-width: none;
   }
 
   .dashboard-filters {
@@ -886,6 +901,32 @@ dd {
     grid-template-columns: 1fr;
   }
 
+  .chart-panel,
+  .detail-panel,
+  .empty-state {
+    padding: 14px;
+  }
+
+  .chart-panel__header,
+  .empty-state {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .bar-chart {
+    min-height: 170px;
+    gap: 6px;
+  }
+
+  .bar-chart__item {
+    grid-template-rows: 20px minmax(92px, 1fr) 32px;
+  }
+
+  .bar-chart__label,
+  .evidence-list strong {
+    white-space: normal;
+  }
+
   .leaderboard-row {
     grid-template-columns: 38px minmax(0, 1fr);
   }
@@ -902,5 +943,39 @@ dd {
   .breakdown-row meter {
     grid-column: 1 / -1;
     grid-row: 2;
+  }
+}
+
+@media (max-width: 380px) {
+  .app-sidebar {
+    margin-inline: 8px;
+  }
+
+  .app-main {
+    padding-inline: 8px;
+  }
+
+  .segmented-control button {
+    font-size: 0.74rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .glass-panel {
+    background: var(--ww-surface-strong);
+    backdrop-filter: none;
+  }
+}
+
+@media (prefers-contrast: more) {
+  :root {
+    --ww-border: rgba(18, 22, 32, 0.38);
+    --ww-text-muted: rgba(18, 22, 32, 0.82);
   }
 }

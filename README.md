@@ -153,6 +153,7 @@ Do not duplicate API types in frontend or backend. Import from `@repo/impact-con
 - Node.js 24 or newer
 - npm
 - Git
+- Railway/Nixpacks configured for Node 24 through `NIXPACKS_NODE_VERSION=24`
 
 For production ingestion later:
 
